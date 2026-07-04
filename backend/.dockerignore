@@ -1,0 +1,17 @@
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+.env.*
+db.sqlite3
+*.log
+.git/
+.gitignore
+test_query.py
+seed_bq_load.py
+init_bigquery.py
+setup_janx.py
+error_log.txt
+server_error.txt

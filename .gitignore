@@ -9,3 +9,15 @@ node_modules/
 dist/
 .env.local
 .env.production
+
+# Local Databases & Credentials
+db.sqlite3
+firebase-credentials.json
+
+# Temporary/Log Files
+*error_log.txt
+*server_error.txt
+
+# Editor configs
+.vscode/
+.idea/
