@@ -66,21 +66,21 @@ export const STATE_DASHBOARD_DATA = {
       }
     ],
     map: {
-      center: [22.2587, 71.1924], // Center coordinates of Gujarat roughly
+      center: [22.2587, 72.1924], // Center coordinates of Gujarat roughly
       zoom: 7,
       hotspots: [
-        { id: "h1", lat: 35, lng: 25, severity: "severe", label: "Saurashtra Pipe Leak", complaints: 342 },
-        { id: "h2", lat: 48, lng: 32, severity: "severe", label: "Highway Pits (NH-8)", complaints: 198 },
-        { id: "h3", lat: 55, lng: 60, severity: "moderate", label: "Anand PHC Staff", complaints: 112 },
-        { id: "h4", lat: 20, lng: 45, severity: "moderate", label: "Vadodara Power Fluctuations", complaints: 88 }
+        { id: "h1", lat: 22.45, lng: 70.12, severity: "severe", label: "Saurashtra Pipe Leak", complaints: 342 },
+        { id: "h2", lat: 22.82, lng: 71.20, severity: "severe", label: "Highway Pits (NH-8)", complaints: 198 },
+        { id: "h3", lat: 22.50, lng: 72.60, severity: "moderate", label: "Anand PHC Staff", complaints: 112 },
+        { id: "h4", lat: 22.02, lng: 71.95, severity: "moderate", label: "Vadodara Power Fluctuations", complaints: 88 }
       ],
       gaps: [
-        { id: "g1", lat: 30, lng: 20, deficiency: "Water Filtration Plant", gapScore: "92/100" },
-        { id: "g2", lat: 45, lng: 70, deficiency: "Maternal Care Clinic", gapScore: "81/100" }
+        { id: "g1", lat: 22.12, lng: 69.95, deficiency: "Water Filtration Plant", gapScore: "92/100" },
+        { id: "g2", lat: 22.65, lng: 72.90, deficiency: "Maternal Care Clinic", gapScore: "81/100" }
       ],
       proposed: [
-        { id: "p1", lat: 40, lng: 50, project: "Smart RO Drinking Station", budget: "₹18 Lakhs" },
-        { id: "p2", lat: 60, lng: 30, project: "Anand PHC Medical Quarter", budget: "₹35 Lakhs" }
+        { id: "p1", lat: 22.35, lng: 71.45, project: "Smart RO Drinking Station", budget: "₹18 Lakhs" },
+        { id: "p2", lat: 22.95, lng: 70.75, project: "Anand PHC Medical Quarter", budget: "₹35 Lakhs" }
       ]
     }
   },
@@ -137,20 +137,20 @@ export const STATE_DASHBOARD_DATA = {
     ],
     map: {
       center: [19.0760, 72.8777],
-      zoom: 10,
+      zoom: 11,
       hotspots: [
-        { id: "h10", lat: 30, lng: 32, severity: "severe", label: "Kurla Pipeline Leak", complaints: 520 },
-        { id: "h11", lat: 45, lng: 48, severity: "severe", label: "Sion ITI Hub Outdates", complaints: 285 },
-        { id: "h12", lat: 50, lng: 20, severity: "severe", label: "Dharavi School Hazard", complaints: 180 },
-        { id: "h13", lat: 25, lng: 55, severity: "moderate", label: "Chembur Nallah Overflow", complaints: 92 }
+        { id: "h10", lat: 19.0820, lng: 72.8850, severity: "severe", label: "Kurla Pipeline Leak", complaints: 520 },
+        { id: "h11", lat: 19.0430, lng: 72.8630, severity: "severe", label: "Sion ITI Hub Outdates", complaints: 285 },
+        { id: "h12", lat: 19.0300, lng: 72.8550, severity: "severe", label: "Dharavi School Hazard", complaints: 180 },
+        { id: "h13", lat: 19.0650, lng: 72.9020, severity: "moderate", label: "Chembur Nallah Overflow", complaints: 92 }
       ],
       gaps: [
-        { id: "g10", lat: 38, lng: 26, deficiency: "Sewerage Pump Station", gapScore: "95/100" },
-        { id: "g11", lat: 60, lng: 60, deficiency: "Pedestrian Skywalk", gapScore: "78/100" }
+        { id: "g10", lat: 19.0120, lng: 72.8250, deficiency: "Sewerage Pump Station", gapScore: "95/100" },
+        { id: "g11", lat: 19.1250, lng: 72.9210, deficiency: "Pedestrian Skywalk", gapScore: "78/100" }
       ],
       proposed: [
-        { id: "p10", lat: 33, lng: 40, project: "Stormwater Drainage Vault", budget: "₹1.2 Crores" },
-        { id: "p11", lat: 52, lng: 18, project: "Green Primary School Block", budget: "₹45 Lakhs" }
+        { id: "p10", lat: 19.0550, lng: 72.8910, project: "Stormwater Drainage Vault", budget: "₹1.2 Crores" },
+        { id: "p11", lat: 19.1020, lng: 72.8450, project: "Green Primary School Block", budget: "₹45 Lakhs" }
       ]
     }
   },
@@ -195,15 +195,15 @@ export const STATE_DASHBOARD_DATA = {
       center: [28.6139, 77.2090],
       zoom: 11,
       hotspots: [
-        { id: "h20", lat: 40, lng: 30, severity: "severe", label: "Dwarka Filter Clog", complaints: 410 },
-        { id: "h21", lat: 60, lng: 55, severity: "severe", label: "Ghazipur Seepage", complaints: 312 },
-        { id: "h22", lat: 30, lng: 50, severity: "moderate", label: "Karol Bagh Parking Choke", complaints: 140 }
+        { id: "h20", lat: 28.5820, lng: 77.0610, severity: "severe", label: "Dwarka Filter Clog", complaints: 410 },
+        { id: "h21", lat: 28.6250, lng: 77.3210, severity: "severe", label: "Ghazipur Seepage", complaints: 312 },
+        { id: "h22", lat: 28.6510, lng: 77.2150, severity: "moderate", label: "Karol Bagh Parking Choke", complaints: 140 }
       ],
       gaps: [
-        { id: "g20", lat: 50, lng: 40, deficiency: "Toxic Filtration Barrier", gapScore: "90/100" }
+        { id: "g20", lat: 28.6010, lng: 77.1520, deficiency: "Toxic Filtration Barrier", gapScore: "90/100" }
       ],
       proposed: [
-        { id: "p20", lat: 43, lng: 33, project: "Modernized Gas Flare Tower", budget: "₹85 Lakhs" }
+        { id: "p20", lat: 28.6320, lng: 77.2650, project: "Modernized Gas Flare Tower", budget: "₹85 Lakhs" }
       ]
     }
   },
@@ -248,14 +248,14 @@ export const STATE_DASHBOARD_DATA = {
       center: [26.8467, 80.9462],
       zoom: 7,
       hotspots: [
-        { id: "h30", lat: 40, lng: 60, severity: "severe", label: "Ballia School Blackout", complaints: 620 },
-        { id: "h31", lat: 45, lng: 30, severity: "severe", label: "Unnao Bridge approach washed Out", complaints: 480 }
+        { id: "h30", lat: 25.7600, lng: 84.1500, severity: "severe", label: "Ballia School Blackout", complaints: 620 },
+        { id: "h31", lat: 26.5400, lng: 80.4900, severity: "severe", label: "Unnao Bridge approach washed Out", complaints: 480 }
       ],
       gaps: [
-        { id: "g30", lat: 38, lng: 55, deficiency: "Electric Grid Extension", gapScore: "96/100" }
+        { id: "g30", lat: 25.8000, lng: 84.2000, deficiency: "Electric Grid Extension", gapScore: "96/100" }
       ],
       proposed: [
-        { id: "p30", lat: 44, lng: 28, project: "Reinforced Approach Causeway", budget: "₹1.4 Crores" }
+        { id: "p30", lat: 26.6000, lng: 80.5500, project: "Reinforced Approach Causeway", budget: "₹1.4 Crores" }
       ]
     }
   }
@@ -264,17 +264,23 @@ export const STATE_DASHBOARD_DATA = {
 // Initial Mock Recent Submissions for Resident Tracking
 export const INITIAL_SUBMISSIONS = {
   "Gujarat": [
-    { id: "sub-1", title: "Streetlight repair near Sector 4 (Morbi)", icon: "light", category: "Electricity", date: "July 2, 2026", status: "In Progress", statusColor: "text-emerald-700 bg-emerald-50 border-emerald-200 dark:text-emerald-400 dark:bg-emerald-500/10 dark:border-emerald-500/20" },
-    { id: "sub-2", title: "Primary Health Center staff shortage (Anand)", icon: "health", category: "Healthcare", date: "June 28, 2026", status: "Under Review", statusColor: "text-amber-700 bg-amber-50 border-amber-200 dark:text-amber-400 dark:bg-amber-500/10 dark:border-amber-500/20" }
+    { id: "sub-1", title: "Streetlight repair near Sector 4", icon: "light", category: "Infrastructure", sector: "ELECTRICITY", date: "23/06/2025", status: "In Progress" },
+    { id: "sub-2", title: "Primary Health Center staff shortage", icon: "health", category: "Healthcare", sector: "HEALTH", date: "15/06/2025", status: "Under Review" },
+    { id: "sub-3", title: "Pothole on MG Road causing accidents", icon: "road", category: "Infrastructure", sector: "ROAD", date: "10/06/2025", status: "Pending" }
   ],
   "Maharashtra": [
-    { id: "sub-3", title: "Water line garbage clutter (Sion ITI lane)", icon: "water", category: "Sanitation", date: "July 3, 2026", status: "In Progress", statusColor: "text-emerald-700 bg-emerald-50 border-emerald-200 dark:text-emerald-400 dark:bg-emerald-500/10 dark:border-emerald-500/20" },
-    { id: "sub-4", title: "Open manhole hazard (Kurla Link Rd)", icon: "safety", category: "Sanitation", date: "June 25, 2026", status: "Under Review", statusColor: "text-amber-700 bg-amber-50 border-amber-200 dark:text-amber-400 dark:bg-amber-500/10 dark:border-amber-500/20" }
+    { id: "sub-1-mah", title: "Streetlight repair near Sector 4", icon: "light", category: "Infrastructure", sector: "ELECTRICITY", date: "23/06/2025", status: "In Progress" },
+    { id: "sub-2-mah", title: "Primary Health Center staff shortage", icon: "health", category: "Healthcare", sector: "HEALTH", date: "15/06/2025", status: "Under Review" },
+    { id: "sub-3-mah", title: "Pothole on MG Road causing accidents", icon: "road", category: "Infrastructure", sector: "ROAD", date: "10/06/2025", status: "Pending" }
   ],
   "Delhi": [
-    { id: "sub-5", title: "Smog tower filter check request", icon: "air", category: "Environment", date: "July 1, 2026", status: "Under Review", statusColor: "text-amber-700 bg-amber-50 border-amber-200 dark:text-amber-400 dark:bg-amber-500/10 dark:border-amber-500/20" }
+    { id: "sub-1-del", title: "Streetlight repair near Sector 4", icon: "light", category: "Infrastructure", sector: "ELECTRICITY", date: "23/06/2025", status: "In Progress" },
+    { id: "sub-2-del", title: "Primary Health Center staff shortage", icon: "health", category: "Healthcare", sector: "HEALTH", date: "15/06/2025", status: "Under Review" },
+    { id: "sub-3-del", title: "Pothole on MG Road causing accidents", icon: "road", category: "Infrastructure", sector: "ROAD", date: "10/06/2025", status: "Pending" }
   ],
   "Uttar Pradesh": [
-    { id: "sub-6", title: "Pothole repair at school gate (Ballia)", icon: "road", category: "Roads", date: "July 2, 2026", status: "In Progress", statusColor: "text-emerald-700 bg-emerald-50 border-emerald-200 dark:text-emerald-400 dark:bg-emerald-500/10 dark:border-emerald-500/20" }
+    { id: "sub-1-up", title: "Streetlight repair near Sector 4", icon: "light", category: "Infrastructure", sector: "ELECTRICITY", date: "23/06/2025", status: "In Progress" },
+    { id: "sub-2-up", title: "Primary Health Center staff shortage", icon: "health", category: "Healthcare", sector: "HEALTH", date: "15/06/2025", status: "Under Review" },
+    { id: "sub-3-up", title: "Pothole on MG Road causing accidents", icon: "road", category: "Infrastructure", sector: "ROAD", date: "10/06/2025", status: "Pending" }
   ]
 };

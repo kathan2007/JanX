@@ -92,3 +92,49 @@
   transform: scale(1);
   transition: opacity 300ms ease-out, transform 300ms ease-out;
 }
+
+/* Leaflet Dark Theme Overrides */
+.dark-popup .leaflet-popup-content-wrapper {
+  background: #000000 !important;
+  color: #f1f5f9 !important;
+  border: 1px solid rgba(96, 165, 250, 0.4) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 0 15px rgba(96, 165, 250, 0.15) !important;
+  font-family: inherit !important;
+  padding: 4px !important;
+}
+
+.dark-popup .leaflet-popup-tip {
+  background: #000000 !important;
+  border-left: 1px solid rgba(96, 165, 250, 0.4) !important;
+  border-bottom: 1px solid rgba(96, 165, 250, 0.4) !important;
+}
+
+.dark-popup .leaflet-popup-close-button {
+  color: #94a3b8 !important;
+  padding: 8px 8px 0 0 !important;
+}
+
+.dark-popup .leaflet-popup-close-button:hover {
+  color: #ef4444 !important;
+}
+
+/* Pulsing Red Dot custom keyframe */
+@keyframes opacity-pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.animate-opacity-pulse {
+  animation: opacity-pulse 1.4s ease-in-out infinite;
+}
+
+/* Clean up custom map container */
+.leaflet-container {
+  background-color: #0b0c10 !important;
+  outline: none;
+}
