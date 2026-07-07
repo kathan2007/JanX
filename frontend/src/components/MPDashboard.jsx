@@ -75,7 +75,7 @@ export default function MPDashboard({ selectedState, currentUser, onLogOut }) {
     const API_BASE_URL = import.meta.env.VITE_API_URL || "https://janx.onrender.com";
     const params = { state: selectedState, limit: 30 };
     if (selectedSector !== "ALL") params.sector = selectedSector;
-    axios.get(`${API_BASE_URL}/api/get-complaints/`, { params, timeout: 15000 })
+    axios.get('https://janx.onrender.com/api/get-complaints/', { params, timeout: 15000 })
       .then(r => {
         // Normalize both image_url and audio_url — adds &alt=media to Firebase Storage links
         const mappedData = (r.data || []).map(item => ({
