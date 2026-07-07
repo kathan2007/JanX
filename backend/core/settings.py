@@ -41,7 +41,17 @@ ROOT_URLCONF = 'core.urls'
 APPEND_SLASH = False
 
 # ─── CORS Configuration ──────────────────────────────────────────────────────
-CORS_ALLOW_ALL_ORIGINS = True
+# Frontend ka Vercel URL yahan add karo (example neeche hai)
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",   # Local development
+    "http://127.0.0.1:5173",
+]
+
+# Agar FRONTEND_URL env variable set hai (Vercel par) toh use bhi add karo
+_FRONTEND_URL = os.getenv('FRONTEND_URL', '')
+if _FRONTEND_URL:
+    CORS_ALLOWED_ORIGINS.append(_FRONTEND_URL)
+
 CORS_ALLOW_CREDENTIALS = True
 # ─────────────────────────────────────────────────────────────────────────────
 
