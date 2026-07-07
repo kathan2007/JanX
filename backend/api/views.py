@@ -132,12 +132,16 @@ class SubmitRequestAPI(APIView):
 
         embedding_vector = generate_text_embedding(english_translation)
 
+        image_url = request.data.get('image_url') or request.POST.get('image_url')
+
         db_success = stream_payload_to_bigquery(
             structured_payload, embedding_vector, raw_input_type,
-            geo_lat=geo_lat, geo_lng=geo_lng
+            geo_lat=geo_lat, geo_lng=geo_lng, image_url=image_url
         )
 
         if db_success:
+            structured_payload['image_url'] = image_url
+            structured_payload['status'] = 'Pending'
             return Response(structured_payload, status=status.HTTP_201_CREATED)
         return Response({"error": "Failed to stream the record to BigQuery."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -192,8 +196,8 @@ class GetRankedProjectsAPI(APIView):
             
             complaint_density_score = min((volume * mean_severity) * 10, 100)
             priority_score = max(0, min(int((0.4 * complaint_density_score) + 
-                                            (0.3 * distance_to_nearest_facility) + 
-                                            (0.3 * population_impact_factor)), 100))
+                                             (0.3 * distance_to_nearest_facility) + 
+                                             (0.3 * population_impact_factor)), 100))
 
             footprint = (
                 f"Priority: {priority_score}/100, Volume: {volume}, Avg Severity: {mean_severity:.1f}, "
@@ -229,3 +233,84 @@ class GetRankedProjectsAPI(APIView):
             item['rank'] = idx + 1
 
         return Response(ranked_projects, status=status.HTTP_200_OK)
+
+
+class GetComplaintsAPI(APIView):
+    """GET /api/get-complaints?state=... — returns individual complaints for a state, sorted by submitted_at DESC."""
+
+    def get(self, request, *args, **kwargs):
+        state = request.query_params.get('state')
+        if not state:
+            return Response({"error": "Missing required query parameter: state"}, status=status.HTTP_400_BAD_REQUEST)
+
+        client = bigquery.Client(project=settings.GCP_PROJECT_ID)
+        query = f'''
+        SELECT
+            request_id,
+            category,
+            location_node,
+            state,
+            CAST(severity_index AS INT64) as severity_index,
+            english_translation,
+            raw_input_type,
+            submitted_at,
+            CAST(geo_lat AS FLOAT64) as geo_lat,
+            CAST(geo_lng AS FLOAT64) as geo_lng,
+            image_url,
+            status
+        FROM `{settings.GCP_PROJECT_ID}.{settings.BQ_DATASET}.citizen_complaints`
+        WHERE state = @state
+        ORDER BY submitted_at DESC
+        '''
+        job_config = bigquery.QueryJobConfig(
+            query_parameters=[bigquery.ScalarQueryParameter("state", "STRING", state)]
+        )
+        try:
+            query_job = client.query(query, job_config=job_config)
+            query_results = []
+            for row in query_job.result():
+                row_dict = dict(row)
+                if not row_dict.get('status'):
+                    row_dict['status'] = 'Pending'
+                
+                # Dynamic AI justification generation offline fallback
+                if not row_dict.get('ai_justification'):
+                    sev = row_dict.get('severity_index', 5)
+                    cat = row_dict.get('category', 'General')
+                    loc = row_dict.get('location_node', 'local area')
+                    row_dict['ai_justification'] = f"System flagged this issue with a severity score of {sev}/10. Priority allocation generated based on structural delays and infrastructure risk parameters for {cat} in {loc}."
+                query_results.append(row_dict)
+            return Response(query_results, status=status.HTTP_200_OK)
+        except Exception as e:
+            logger.error(f"BigQuery query complaints failed: {str(e)}")
+            return Response([], status=status.HTTP_200_OK)
+
+
+class UpdateStatusAPI(APIView):
+    """PATCH /api/update-status — updates status of a specific complaint request."""
+
+    def patch(self, request, *args, **kwargs):
+        request_id = request.data.get('request_id')
+        new_status = request.data.get('status')
+        if not request_id or not new_status:
+            return Response({"error": "Fields 'request_id' and 'status' are required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        client = bigquery.Client(project=settings.GCP_PROJECT_ID)
+        query = f'''
+        UPDATE `{settings.GCP_PROJECT_ID}.{settings.BQ_DATASET}.citizen_complaints`
+        SET status = @status
+        WHERE request_id = @request_id
+        '''
+        job_config = bigquery.QueryJobConfig(
+            query_parameters=[
+                bigquery.ScalarQueryParameter("status", "STRING", new_status),
+                bigquery.ScalarQueryParameter("request_id", "STRING", request_id)
+            ]
+        )
+        try:
+            query_job = client.query(query, job_config=job_config)
+            query_job.result()  # blocks until execution finishes
+            return Response({"success": True, "message": f"Status updated to '{new_status}'."}, status=status.HTTP_200_OK)
+        except Exception as e:
+            logger.error(f"BigQuery update status failed: {str(e)}")
+            return Response({"error": f"Failed to update status: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

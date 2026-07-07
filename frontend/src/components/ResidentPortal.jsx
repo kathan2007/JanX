@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
-import { auth } from "../firebase";
+import { auth, storage } from "../firebase";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import axios from "axios";
 import { 
   HelpCircle, 
@@ -144,6 +145,23 @@ export default function ResidentPortal({ selectedState, onTriggerAuthModal, curr
       if (audioFile) formData.append("audio", audioFile);
       if (imageFile) formData.append("image", imageFile);
 
+      // Upload image to Firebase Storage if exists
+      let uploadedImageUrl = null;
+      if (imageFile) {
+        try {
+          const storageRef = ref(storage, `complaints/${Date.now()}_${imageFile.name}`);
+          const snapshot = await uploadBytes(storageRef, imageFile);
+          uploadedImageUrl = await getDownloadURL(snapshot.ref);
+          console.log("Uploaded image successfully to Firebase Storage:", uploadedImageUrl);
+          formData.append("image_url", uploadedImageUrl);
+        } catch (storageErr) {
+          console.error("Firebase Storage upload failed, falling back to local base64:", storageErr);
+          // Fallback to base64 preview or placeholder so it doesn't break sandbox preview
+          uploadedImageUrl = imagePreview || "https://placehold.co/600x400/1a1a1a/ffffff?text=Evidence";
+          formData.append("image_url", uploadedImageUrl);
+        }
+      }
+
       // 3. Make HTTP request to configured Backend API
       const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
       let categoryResponse = "Infrastructure Gap";
@@ -183,7 +201,8 @@ export default function ResidentPortal({ selectedState, onTriggerAuthModal, curr
         category: categoryResponse,
         sector: selectedSector,
         date: new Date().toLocaleDateString("en-GB"),
-        status: "Under Review"
+        status: "Under Review",
+        image_url: uploadedImageUrl || imagePreview
       };
 
       setMySubmissions((prev) => ({

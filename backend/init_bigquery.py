@@ -36,11 +36,29 @@ def init_bq():
         bigquery.SchemaField("submitted_at", "STRING", mode="NULLABLE"),
         bigquery.SchemaField("geo_lat", "FLOAT64", mode="NULLABLE"),
         bigquery.SchemaField("geo_lng", "FLOAT64", mode="NULLABLE"),
+        bigquery.SchemaField("image_url", "STRING", mode="NULLABLE"),
+        bigquery.SchemaField("status", "STRING", mode="NULLABLE"),
     ]
     
     try:
-        client.get_table(complaints_table_id)
-        print("Table 'citizen_complaints' already exists.")
+        table = client.get_table(complaints_table_id)
+        print("Table 'citizen_complaints' already exists. Checking schema updates...")
+        existing_fields = {field.name for field in table.schema}
+        new_fields = list(table.schema)
+        schema_changed = False
+        if "image_url" not in existing_fields:
+            new_fields.append(bigquery.SchemaField("image_url", "STRING", mode="NULLABLE"))
+            schema_changed = True
+        if "status" not in existing_fields:
+            new_fields.append(bigquery.SchemaField("status", "STRING", mode="NULLABLE"))
+            schema_changed = True
+        
+        if schema_changed:
+            table.schema = new_fields
+            client.update_table(table, ["schema"])
+            print("Successfully updated 'citizen_complaints' schema with new columns.")
+        else:
+            print("Schema is up to date.")
     except Exception:
         table = bigquery.Table(complaints_table_id, schema=complaints_schema)
         client.create_table(table)

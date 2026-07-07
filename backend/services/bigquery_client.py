@@ -6,7 +6,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-def stream_payload_to_bigquery(structured_data, embedding, raw_input_type, geo_lat=None, geo_lng=None):
+def stream_payload_to_bigquery(structured_data, embedding, raw_input_type, geo_lat=None, geo_lng=None, image_url=None, status="Pending"):
     """Streams a structured complaint record into BigQuery, falling back to a Load Job if streaming is disabled."""
     client = bigquery.Client(project=settings.GCP_PROJECT_ID)
     table_id = f"{settings.GCP_PROJECT_ID}.{settings.BQ_DATASET}.citizen_complaints"
@@ -35,7 +35,9 @@ def stream_payload_to_bigquery(structured_data, embedding, raw_input_type, geo_l
         "raw_input_type": raw_input_type,
         "submitted_at": datetime.now(timezone.utc).isoformat(),
         "geo_lat": lat_val,
-        "geo_lng": lng_val
+        "geo_lng": lng_val,
+        "image_url": image_url,
+        "status": status
     }]
 
     logger.info(f"Attempting to insert row into BigQuery {table_id}...")
