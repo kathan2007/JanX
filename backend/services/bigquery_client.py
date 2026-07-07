@@ -6,6 +6,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 def stream_payload_to_bigquery(
     structured_data,
     embedding,
@@ -14,6 +15,7 @@ def stream_payload_to_bigquery(
     geo_lng=None,
     sector=None,
     image_url=None,
+    status="Pending",
 ):
     """Streams a structured complaint record into BigQuery, falling back to a Load Job if streaming is disabled."""
     client = bigquery.Client(project=settings.GCP_PROJECT_ID)
@@ -44,12 +46,13 @@ def stream_payload_to_bigquery(
         "submitted_at":         datetime.now(timezone.utc).isoformat(),
         "geo_lat":              lat_val,
         "geo_lng":              lng_val,
-        # 🔥 New fields — frontend sector + photo URL
+        # 🔥 Extended fields — frontend sector + photo URL + status
         "sector":               sector or None,
         "image_url":            image_url or None,
+        "status":               status,
     }]
 
-    logger.info(f"Attempting to insert row into BigQuery {table_id} | sector={sector} | has_image={bool(image_url)}...")
+    logger.info(f"Attempting to insert row into BigQuery {table_id} | sector={sector} | has_image={bool(image_url)} | status={status}...")
 
     # Try legacy streaming inserts first
     try:

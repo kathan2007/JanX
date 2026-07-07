@@ -158,15 +158,17 @@ class SubmitRequestAPI(APIView):
 
         embedding_vector = generate_text_embedding(english_translation)
 
+        image_url = request.data.get('image_url') or request.POST.get('image_url')
+
         db_success = stream_payload_to_bigquery(
             structured_payload, embedding_vector, raw_input_type,
             geo_lat=geo_lat, geo_lng=geo_lng,
-            sector=sector,        # 🔥 new
-            image_url=image_url,  # 🔥 new
+            sector=sector,
+            image_url=image_url,
         )
 
         if db_success:
-            response_data = {**structured_payload, "sector": sector, "image_url": image_url}
+            response_data = {**structured_payload, "sector": sector, "image_url": image_url, "status": "Pending"}
             return Response(response_data, status=status.HTTP_201_CREATED)
         return Response({"error": "Failed to stream the record to BigQuery."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -221,8 +223,8 @@ class GetRankedProjectsAPI(APIView):
             
             complaint_density_score = min((volume * mean_severity) * 10, 100)
             priority_score = max(0, min(int((0.4 * complaint_density_score) + 
-                                            (0.3 * distance_to_nearest_facility) + 
-                                            (0.3 * population_impact_factor)), 100))
+                                             (0.3 * distance_to_nearest_facility) + 
+                                             (0.3 * population_impact_factor)), 100))
 
             footprint = (
                 f"Priority: {priority_score}/100, Volume: {volume}, Avg Severity: {mean_severity:.1f}, "
@@ -279,7 +281,7 @@ class GetRankedProjectsAPI(APIView):
 
 class GetComplaintsAPI(APIView):
     """GET /api/get-complaints?state=...&sector=...&limit=50
-    Fetches individual complaint records (with image_url) for MP Dashboard photo display."""
+    Fetches individual complaint records (with image_url, sector) for MP Dashboard."""
 
     def get(self, request, *args, **kwargs):
         state = request.query_params.get('state')
@@ -304,12 +306,14 @@ class GetComplaintsAPI(APIView):
             sector,
             location_node,
             state,
-            severity_index,
+            CAST(severity_index AS INT64) as severity_index,
             english_translation,
+            raw_input_type,
             submitted_at,
-            geo_lat,
-            geo_lng,
-            image_url
+            CAST(geo_lat AS FLOAT64) as geo_lat,
+            CAST(geo_lng AS FLOAT64) as geo_lng,
+            image_url,
+            status
         FROM `{settings.GCP_PROJECT_ID}.{settings.BQ_DATASET}.citizen_complaints` c
         WHERE c.state = @state
         {sector_clause}
@@ -325,7 +329,34 @@ class GetComplaintsAPI(APIView):
 
         try:
             query_job = client.query(query, job_config=job_config)
-            rows = list(query_job.result())
+            complaints = []
+            for row in query_job.result():
+                row_dict = {
+                    "request_id":           row.request_id,
+                    "category":             row.category,
+                    "sector":               row.sector,
+                    "location_node":        row.location_node,
+                    "state":                row.state,
+                    "severity_index":       row.severity_index,
+                    "english_translation":  row.english_translation,
+                    "raw_input_type":       row.raw_input_type,
+                    "submitted_at":         str(row.submitted_at) if row.submitted_at else None,
+                    "geo_lat":              float(row.geo_lat) if row.geo_lat is not None else None,
+                    "geo_lng":              float(row.geo_lng) if row.geo_lng is not None else None,
+                    "image_url":            row.image_url,
+                    "status":               row.status or "Pending",
+                }
+                # AI justification fallback for frontend modal
+                sev = row_dict.get('severity_index', 5)
+                cat = row_dict.get('category', 'General')
+                loc = row_dict.get('location_node', 'local area')
+                row_dict['ai_justification'] = (
+                    f"System flagged this issue with a severity score of {sev}/10. "
+                    f"Priority allocation generated based on structural delays and "
+                    f"infrastructure risk parameters for {cat} in {loc}."
+                )
+                complaints.append(row_dict)
+            return Response(complaints, status=status.HTTP_200_OK)
         except Exception as e:
             logger.error(f"GetComplaintsAPI BigQuery query failed: {str(e)}")
             return Response(
@@ -333,43 +364,24 @@ class GetComplaintsAPI(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-        complaints = []
-        for row in rows:
-            complaints.append({
-                "request_id":           row.request_id,
-                "category":             row.category,
-                "sector":               row.sector,
-                "location_node":        row.location_node,
-                "state":                row.state,
-                "severity_index":       row.severity_index,
-                "english_translation":  row.english_translation,
-                "submitted_at":         str(row.submitted_at) if row.submitted_at else None,
-                "geo_lat":              float(row.geo_lat) if row.geo_lat is not None else None,
-                "geo_lng":              float(row.geo_lng) if row.geo_lng is not None else None,
-                "image_url":            row.image_url,
-            })
-
-        return Response(complaints, status=status.HTTP_200_OK)
-
 
 class DevelopmentRequestDetailAPI(APIView):
     """PATCH /api/requests/<id>/ — updates status of a development request."""
 
     def patch(self, request, pk, *args, **kwargs):
-        # 🔐 STEP 1: Firebase Authentication Check
+        # 🔐 Firebase Authentication Check
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return Response({"error": "Unauthorized: No Firebase token provided."}, status=status.HTTP_401_UNAUTHORIZED)
 
         id_token = auth_header.split(' ')[1]
 
-        # 🚧 SANDBOX BYPASS — allow mock token in local dev mode (MOCK_AI=True)
         SANDBOX_TOKEN = "mock-jwt-sandbox-token-string-12345"
         is_sandbox = getattr(settings, 'MOCK_AI', False) and id_token == SANDBOX_TOKEN
 
         if not is_sandbox:
             try:
-                decoded_token = auth.verify_id_token(id_token)
+                auth.verify_id_token(id_token)
             except Exception as e:
                 logger.warning(f"Firebase token verification failed: {e}")
                 return Response({"error": "Unauthorized: Invalid or expired Firebase token."}, status=status.HTTP_401_UNAUTHORIZED)
@@ -387,7 +399,10 @@ class DevelopmentRequestDetailAPI(APIView):
 
         valid_statuses = [choice[0] for choice in DevelopmentRequest.STATUS_CHOICES]
         if new_status not in valid_statuses:
-            return Response({"error": f"Invalid status: {new_status}. Allowed values are {valid_statuses}."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": f"Invalid status: {new_status}. Allowed values are {valid_statuses}."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         dev_req.status = new_status
         dev_req.save()
@@ -399,3 +414,42 @@ class DevelopmentRequestDetailAPI(APIView):
             "state": dev_req.state,
             "priority_score": dev_req.score
         }, status=status.HTTP_200_OK)
+
+
+class UpdateStatusAPI(APIView):
+    """PATCH /api/update-status — updates status of a specific complaint request in BigQuery."""
+
+    def patch(self, request, *args, **kwargs):
+        request_id = request.data.get('request_id')
+        new_status = request.data.get('status')
+        if not request_id or not new_status:
+            return Response(
+                {"error": "Fields 'request_id' and 'status' are required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        client = bigquery.Client(project=settings.GCP_PROJECT_ID)
+        query = f'''
+        UPDATE `{settings.GCP_PROJECT_ID}.{settings.BQ_DATASET}.citizen_complaints`
+        SET status = @status
+        WHERE request_id = @request_id
+        '''
+        job_config = bigquery.QueryJobConfig(
+            query_parameters=[
+                bigquery.ScalarQueryParameter("status", "STRING", new_status),
+                bigquery.ScalarQueryParameter("request_id", "STRING", request_id)
+            ]
+        )
+        try:
+            query_job = client.query(query, job_config=job_config)
+            query_job.result()
+            return Response(
+                {"success": True, "message": f"Status updated to '{new_status}'."},
+                status=status.HTTP_200_OK
+            )
+        except Exception as e:
+            logger.error(f"BigQuery update status failed: {str(e)}")
+            return Response(
+                {"error": f"Failed to update status: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

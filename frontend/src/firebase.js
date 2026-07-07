@@ -1,6 +1,7 @@
 // firebase.js — JanX Firebase SDK initialization
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
+import { getStorage } from "firebase/storage";
 
 // Firebase config — reads from Vite env vars (fallback to hardcoded for local dev)
 const firebaseConfig = {
@@ -14,8 +15,8 @@ const firebaseConfig = {
 
 // Initialize Firebase app
 const app = initializeApp(firebaseConfig);
-
 // Initialize Firebase Auth — required by App.jsx, ResidentPortal.jsx, AuthModal.jsx
-export const auth = getAuth(app);
+export const auth = getAuth(app); // current user available via auth.currentUser
+export const storage = getStorage(app);
 
 export default app;
