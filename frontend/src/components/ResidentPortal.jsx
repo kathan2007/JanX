@@ -607,4 +607,5 @@ export default function ResidentPortal({ selectedState, onTriggerAuthModal, curr
       </div>
 
     </div>
-  );
+  )
+};
