@@ -37,7 +37,7 @@ def seed_load():
     ]
 
     # ── Citizen complaints (the table the ranking query reads from) ───────────
-    def make_complaint(state, location, category, severity, translation):
+    def make_complaint(state, location, category, severity, translation, sector=None, image_url=None):
         return {
             "request_id":          str(uuid.uuid4()),
             "category":            category,
@@ -50,6 +50,9 @@ def seed_load():
             "submitted_at":        datetime.now(timezone.utc).isoformat(),
             "geo_lat":             None,
             "geo_lng":             None,
+            # 🔥 New fields
+            "sector":              sector,
+            "image_url":           image_url,
         }
 
     complaint_rows = [

@@ -6,7 +6,15 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-def stream_payload_to_bigquery(structured_data, embedding, raw_input_type, geo_lat=None, geo_lng=None):
+def stream_payload_to_bigquery(
+    structured_data,
+    embedding,
+    raw_input_type,
+    geo_lat=None,
+    geo_lng=None,
+    sector=None,
+    image_url=None,
+):
     """Streams a structured complaint record into BigQuery, falling back to a Load Job if streaming is disabled."""
     client = bigquery.Client(project=settings.GCP_PROJECT_ID)
     table_id = f"{settings.GCP_PROJECT_ID}.{settings.BQ_DATASET}.citizen_complaints"
@@ -25,21 +33,24 @@ def stream_payload_to_bigquery(structured_data, embedding, raw_input_type, geo_l
             pass
 
     row_to_insert = [{
-        "request_id": str(uuid.uuid4()),
-        "category": structured_data.get("category"),
-        "location_node": structured_data.get("location_node"),
-        "state": structured_data.get("state"),
-        "severity_index": int(structured_data.get("severity_index", 1)),
-        "english_translation": structured_data.get("english_translation"),
-        "embedding": embedding,
-        "raw_input_type": raw_input_type,
-        "submitted_at": datetime.now(timezone.utc).isoformat(),
-        "geo_lat": lat_val,
-        "geo_lng": lng_val
+        "request_id":           str(uuid.uuid4()),
+        "category":             structured_data.get("category"),
+        "location_node":        structured_data.get("location_node"),
+        "state":                structured_data.get("state"),
+        "severity_index":       int(structured_data.get("severity_index", 1)),
+        "english_translation":  structured_data.get("english_translation"),
+        "embedding":            embedding,
+        "raw_input_type":       raw_input_type,
+        "submitted_at":         datetime.now(timezone.utc).isoformat(),
+        "geo_lat":              lat_val,
+        "geo_lng":              lng_val,
+        # 🔥 New fields — frontend sector + photo URL
+        "sector":               sector or None,
+        "image_url":            image_url or None,
     }]
 
-    logger.info(f"Attempting to insert row into BigQuery {table_id}...")
-    
+    logger.info(f"Attempting to insert row into BigQuery {table_id} | sector={sector} | has_image={bool(image_url)}...")
+
     # Try legacy streaming inserts first
     try:
         errors = client.insert_rows_json(table_id, row_to_insert)
@@ -63,4 +74,3 @@ def stream_payload_to_bigquery(structured_data, embedding, raw_input_type, geo_l
     except Exception as e:
         logger.error(f"Load job fallback failed: {e}")
         return False
-

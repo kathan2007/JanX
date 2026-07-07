@@ -36,6 +36,9 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = 'core.urls'
 
+# Prevent Django from 301-redirecting POST requests when URLs lack trailing slash
+APPEND_SLASH = False
+
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',

@@ -33,9 +33,12 @@ def init_bq():
         bigquery.SchemaField("english_translation", "STRING", mode="NULLABLE"),
         bigquery.SchemaField("embedding", "FLOAT64", mode="REPEATED"),
         bigquery.SchemaField("raw_input_type", "STRING", mode="NULLABLE"),
-        bigquery.SchemaField("submitted_at", "STRING", mode="NULLABLE"),
+        bigquery.SchemaField("submitted_at", "TIMESTAMP", mode="NULLABLE"),
         bigquery.SchemaField("geo_lat", "FLOAT64", mode="NULLABLE"),
         bigquery.SchemaField("geo_lng", "FLOAT64", mode="NULLABLE"),
+        # 🔥 New fields
+        bigquery.SchemaField("sector", "STRING", mode="NULLABLE"),
+        bigquery.SchemaField("image_url", "STRING", mode="NULLABLE"),
     ]
     
     try:

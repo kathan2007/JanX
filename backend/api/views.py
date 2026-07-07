@@ -5,6 +5,7 @@ from rest_framework import status
 from google.cloud import bigquery
 from django.conf import settings
 from firebase_admin import auth
+from api.models import DevelopmentRequest
 
 from services.gemini_service import (
     structure_and_translate_complaint,
@@ -16,6 +17,12 @@ from services.vertex_speech import transcribe_regional_audio
 from services.bigquery_client import stream_payload_to_bigquery
 
 logger = logging.getLogger(__name__)
+
+# Valid sector values (must match frontend dropdown + BigQuery enum)
+VALID_SECTORS = {
+    "WATER", "ROAD", "HEALTH", "EDUCATION", "ELECTRICITY",
+    "SANITATION", "WASTE", "SAFETY", "WOMEN_CHILD", "ENVIRONMENT", "AGRICULTURE"
+}
 
 
 class ApiRootView(APIView):
@@ -29,6 +36,7 @@ class ApiRootView(APIView):
             "endpoints": {
                 "submit_request": "POST /api/submit-request",
                 "get_ranked_projects": "GET /api/get-ranked-projects?state=<state_name>",
+                "get_complaints": "GET /api/get-complaints?state=<state_name>&sector=<sector>&limit=<N>",
             }
         })
 
@@ -49,17 +57,35 @@ class SubmitRequestAPI(APIView):
             return Response({"error": "Unauthorized: No Firebase token provided."}, status=status.HTTP_401_UNAUTHORIZED)
 
         id_token = auth_header.split(' ')[1]
-        try:
-            decoded_token = auth.verify_id_token(id_token)
-            # Future use ke liye: user_email = decoded_token.get('email')
-        except Exception as e:
-            logger.warning(f"Firebase token verification failed: {e}")
-            return Response({"error": "Unauthorized: Invalid or expired Firebase token."}, status=status.HTTP_401_UNAUTHORIZED)
+
+        # 🚧 SANDBOX BYPASS — allow mock token in local dev mode (MOCK_AI=True)
+        SANDBOX_TOKEN = "mock-jwt-sandbox-token-string-12345"
+        is_sandbox = getattr(settings, 'MOCK_AI', False) and id_token == SANDBOX_TOKEN
+
+        if not is_sandbox:
+            try:
+                decoded_token = auth.verify_id_token(id_token)
+                # Future use: user_email = decoded_token.get('email')
+            except Exception as e:
+                logger.warning(f"Firebase token verification failed: {e}")
+                return Response({"error": "Unauthorized: Invalid or expired Firebase token."}, status=status.HTTP_401_UNAUTHORIZED)
+        else:
+            logger.info("Sandbox mode — bypassing Firebase token verification.")
+
+
 
         # ✅ STEP 2: Authenticated — Pipeline Logic Shuru
         state = request.data.get('state')
         if not state:
             return Response({"error": "The 'state' field is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 🔥 Extract sector (frontend-selected department)
+        sector = request.data.get('sector', '').upper() or None
+        if sector and sector not in VALID_SECTORS:
+            logger.warning(f"Invalid sector '{sector}' received — storing as-is.")
+
+        # 🔥 Extract image_url (Frontend already uploaded to Firebase Storage & sends back the URL)
+        image_url = request.data.get('image_url') or None
 
         normalized_text = ""
         raw_input_type = "text"
@@ -134,11 +160,14 @@ class SubmitRequestAPI(APIView):
 
         db_success = stream_payload_to_bigquery(
             structured_payload, embedding_vector, raw_input_type,
-            geo_lat=geo_lat, geo_lng=geo_lng
+            geo_lat=geo_lat, geo_lng=geo_lng,
+            sector=sector,        # 🔥 new
+            image_url=image_url,  # 🔥 new
         )
 
         if db_success:
-            return Response(structured_payload, status=status.HTTP_201_CREATED)
+            response_data = {**structured_payload, "sector": sector, "image_url": image_url}
+            return Response(response_data, status=status.HTTP_201_CREATED)
         return Response({"error": "Failed to stream the record to BigQuery."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -214,14 +243,31 @@ class GetRankedProjectsAPI(APIView):
                     "lng": float(row.representative_lng)
                 }
 
+            # Sync with SQLite DevelopmentRequest model
+            project_title = f"JanX Redressal: {row.category} at {row.location_node}"
+            dev_req, created = DevelopmentRequest.objects.get_or_create(
+                title=project_title,
+                state=state,
+                defaults={
+                    "description": ai_justification,
+                    "score": priority_score,
+                    "status": "PENDING"
+                }
+            )
+            if not created:
+                dev_req.score = priority_score
+                dev_req.save()
+
             ranked_projects.append({
-                "project_title": f"JanX Redressal: {row.category} at {row.location_node}",
+                "id": dev_req.id,
+                "status": dev_req.status,
+                "project_title": project_title,
                 "state": state,
-                "priority_score": priority_score,
+                "priority_score": dev_req.score,
                 "complaint_count": volume,
                 "geolocation": geolocation,
                 "category": row.category,
-                "ai_justification": ai_justification
+                "ai_justification": dev_req.description
             })
 
         ranked_projects = sorted(ranked_projects, key=lambda x: x['priority_score'], reverse=True)
@@ -229,3 +275,127 @@ class GetRankedProjectsAPI(APIView):
             item['rank'] = idx + 1
 
         return Response(ranked_projects, status=status.HTTP_200_OK)
+
+
+class GetComplaintsAPI(APIView):
+    """GET /api/get-complaints?state=...&sector=...&limit=50
+    Fetches individual complaint records (with image_url) for MP Dashboard photo display."""
+
+    def get(self, request, *args, **kwargs):
+        state = request.query_params.get('state')
+        if not state:
+            return Response(
+                {"error": "Missing required query parameter: state"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        sector_filter = request.query_params.get('sector', '').upper() or None
+        limit = int(request.query_params.get('limit', 50))
+        limit = min(limit, 200)  # cap at 200
+
+        client = bigquery.Client(project=settings.GCP_PROJECT_ID)
+
+        sector_clause = "AND c.sector = @sector" if sector_filter else ""
+
+        query = f'''
+        SELECT
+            request_id,
+            category,
+            sector,
+            location_node,
+            state,
+            severity_index,
+            english_translation,
+            submitted_at,
+            geo_lat,
+            geo_lng,
+            image_url
+        FROM `{settings.GCP_PROJECT_ID}.{settings.BQ_DATASET}.citizen_complaints` c
+        WHERE c.state = @state
+        {sector_clause}
+        ORDER BY submitted_at DESC
+        LIMIT {limit}
+        '''
+
+        params = [bigquery.ScalarQueryParameter("state", "STRING", state)]
+        if sector_filter:
+            params.append(bigquery.ScalarQueryParameter("sector", "STRING", sector_filter))
+
+        job_config = bigquery.QueryJobConfig(query_parameters=params)
+
+        try:
+            query_job = client.query(query, job_config=job_config)
+            rows = list(query_job.result())
+        except Exception as e:
+            logger.error(f"GetComplaintsAPI BigQuery query failed: {str(e)}")
+            return Response(
+                {"error": f"BigQuery query failed: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+        complaints = []
+        for row in rows:
+            complaints.append({
+                "request_id":           row.request_id,
+                "category":             row.category,
+                "sector":               row.sector,
+                "location_node":        row.location_node,
+                "state":                row.state,
+                "severity_index":       row.severity_index,
+                "english_translation":  row.english_translation,
+                "submitted_at":         str(row.submitted_at) if row.submitted_at else None,
+                "geo_lat":              float(row.geo_lat) if row.geo_lat is not None else None,
+                "geo_lng":              float(row.geo_lng) if row.geo_lng is not None else None,
+                "image_url":            row.image_url,
+            })
+
+        return Response(complaints, status=status.HTTP_200_OK)
+
+
+class DevelopmentRequestDetailAPI(APIView):
+    """PATCH /api/requests/<id>/ — updates status of a development request."""
+
+    def patch(self, request, pk, *args, **kwargs):
+        # 🔐 STEP 1: Firebase Authentication Check
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return Response({"error": "Unauthorized: No Firebase token provided."}, status=status.HTTP_401_UNAUTHORIZED)
+
+        id_token = auth_header.split(' ')[1]
+
+        # 🚧 SANDBOX BYPASS — allow mock token in local dev mode (MOCK_AI=True)
+        SANDBOX_TOKEN = "mock-jwt-sandbox-token-string-12345"
+        is_sandbox = getattr(settings, 'MOCK_AI', False) and id_token == SANDBOX_TOKEN
+
+        if not is_sandbox:
+            try:
+                decoded_token = auth.verify_id_token(id_token)
+            except Exception as e:
+                logger.warning(f"Firebase token verification failed: {e}")
+                return Response({"error": "Unauthorized: Invalid or expired Firebase token."}, status=status.HTTP_401_UNAUTHORIZED)
+        else:
+            logger.info("Sandbox mode — bypassing Firebase token verification.")
+
+        try:
+            dev_req = DevelopmentRequest.objects.get(pk=pk)
+        except DevelopmentRequest.DoesNotExist:
+            return Response({"error": "Development request not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        new_status = request.data.get('status')
+        if not new_status:
+            return Response({"error": "Missing status value."}, status=status.HTTP_400_BAD_REQUEST)
+
+        valid_statuses = [choice[0] for choice in DevelopmentRequest.STATUS_CHOICES]
+        if new_status not in valid_statuses:
+            return Response({"error": f"Invalid status: {new_status}. Allowed values are {valid_statuses}."}, status=status.HTTP_400_BAD_REQUEST)
+
+        dev_req.status = new_status
+        dev_req.save()
+
+        return Response({
+            "id": dev_req.id,
+            "status": dev_req.status,
+            "title": dev_req.title,
+            "state": dev_req.state,
+            "priority_score": dev_req.score
+        }, status=status.HTTP_200_OK)

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import axios from "axios";
 import { STATE_DASHBOARD_DATA } from "../data/mockData";
 import { 
   Users, 
@@ -13,7 +14,10 @@ import {
   HelpCircle,
   FolderLock,
   CheckCircle,
-  X
+  X,
+  ImageOff,
+  RefreshCw,
+  Inbox
 } from "lucide-react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -28,6 +32,11 @@ export default function MPDashboard({ selectedState, currentUser, onLogOut }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
   const [selectedSector, setSelectedSector] = useState("ALL");
+
+  // 🔥 Live Complaint Feed from BigQuery
+  const [liveComplaints, setLiveComplaints] = useState([]);
+  const [feedLoading, setFeedLoading] = useState(false);
+  const [feedError, setFeedError] = useState("");
 
   // Refs for Leaflet instantiation
   const mapContainerRef = useRef(null);
@@ -45,6 +54,28 @@ export default function MPDashboard({ selectedState, currentUser, onLogOut }) {
     setActiveCardId(null);
     setDrawerOpen(false);
   }, [selectedState, stateData]);
+
+  // 🔥 Live Complaint Feed — fetch from BigQuery via backend
+  useEffect(() => {
+    const fetchLiveComplaints = async () => {
+      setFeedLoading(true);
+      setFeedError("");
+      try {
+        const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
+        const params = { state: selectedState, limit: 30 };
+        if (selectedSector !== "ALL") params.sector = selectedSector;
+        const res = await axios.get(`${API_BASE_URL}/api/get-complaints/`, { params, timeout: 15000 });
+        setLiveComplaints(res.data || []);
+      } catch (err) {
+        console.warn("Live complaint feed unavailable (backend offline or no data):", err.message);
+        setLiveComplaints([]);
+        setFeedError("Live feed unavailable — backend server may be offline.");
+      } finally {
+        setFeedLoading(false);
+      }
+    };
+    fetchLiveComplaints();
+  }, [selectedState, selectedSector]);
 
   // Leaflet Map Initialization Hook
   useEffect(() => {
@@ -690,6 +721,142 @@ export default function MPDashboard({ selectedState, currentUser, onLogOut }) {
           </div>
         </div>
       )}
+
+      {/* ─────────── LIVE COMPLAINT FEED (BigQuery real data) ─────────── */}
+      <div className="mt-8 space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
+            <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400">
+              Live Complaint Feed
+            </h3>
+            <span className="text-[10px] font-mono text-blue-400 bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 rounded ml-1">
+              BigQuery Live
+            </span>
+          </div>
+          <button
+            onClick={() => {
+              setFeedLoading(true);
+              setFeedError(""); // Reset any prior errors
+              const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
+              const params = { state: selectedState, limit: 30 };
+              if (selectedSector !== "ALL") params.sector = selectedSector;
+              axios.get(`${API_BASE_URL}/api/get-complaints/`, { params, timeout: 15000 })
+                .then(r => {
+                  setLiveComplaints(r.data || []);
+                  setFeedError("");
+                })
+                .catch(() => setFeedError("Live feed unavailable."))
+                .finally(() => setFeedLoading(false));
+            }}
+            className="flex items-center gap-1.5 text-[11px] font-bold text-slate-400 hover:text-white border border-white/10 hover:border-white/25 px-3 py-1.5 rounded-lg transition-all cursor-pointer"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${feedLoading ? "animate-spin" : ""}`} />
+            Refresh
+          </button>
+        </div>
+
+        {feedLoading && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {[1,2,3].map(i => (
+              <div key={i} className="rounded-2xl border border-white/5 bg-white/[0.02] p-4 animate-pulse space-y-3">
+                <div className="h-3 bg-slate-800 rounded w-1/3" />
+                <div className="h-32 bg-slate-800/60 rounded-lg" />
+                <div className="h-3 bg-slate-800 rounded w-3/4" />
+                <div className="h-3 bg-slate-800 rounded w-1/2" />
+              </div>
+            ))}
+          </div>
+        )}
+
+        {!feedLoading && feedError && (
+          <div className="text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-3 font-mono">
+            ⚠️ {feedError}
+          </div>
+        )}
+
+        {!feedLoading && !feedError && liveComplaints.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-12 border border-dashed border-white/10 rounded-2xl text-center text-slate-500">
+            <Inbox className="h-10 w-10 mb-3 text-slate-700" />
+            <p className="text-sm font-semibold">No complaints recorded yet for <span className="text-blue-400">{selectedState}</span></p>
+            <p className="text-xs mt-1">Submit a complaint via the Resident Portal to see it here.</p>
+          </div>
+        )}
+
+        {!feedLoading && liveComplaints.length > 0 && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {liveComplaints.map((complaint) => {
+              const severityColor =
+                complaint.severity_index >= 8 ? "border-red-500/40 text-red-400 bg-red-500/10"
+                : complaint.severity_index >= 5 ? "border-amber-500/40 text-amber-400 bg-amber-500/10"
+                : "border-blue-500/40 text-blue-400 bg-blue-500/10";
+
+              const sectorEmoji = {
+                WATER:"🚰",ROAD:"🛣️",HEALTH:"🏥",EDUCATION:"📚",
+                ELECTRICITY:"⚡",SANITATION:"🧹",WASTE:"🗑️",
+                SAFETY:"🛡️",WOMEN_CHILD:"👶",ENVIRONMENT:"🌱",AGRICULTURE:"🌾"
+              }[complaint.sector] || "📋";
+
+              return (
+                <div
+                  key={complaint.request_id}
+                  className="flex flex-col glass-panel border border-white/5 hover:border-blue-500/30 rounded-2xl overflow-hidden transition-all duration-300 hover:shadow-[0_0_20px_rgba(59,130,246,0.10)]"
+                >
+                  {complaint.image_url ? (
+                    <div className="relative h-40 bg-slate-900 overflow-hidden shrink-0">
+                      <img
+                        src={complaint.image_url}
+                        alt="Complaint evidence"
+                        className="w-full h-full object-cover"
+                        onError={(e) => { e.target.style.display = "none"; }}
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-transparent pointer-events-none" />
+                      <span className="absolute bottom-2 left-3 text-[10px] font-bold text-white/70 font-mono bg-slate-950/60 px-2 py-0.5 rounded">
+                        📷 Photo Evidence
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="h-10 flex items-center justify-center bg-slate-900/40 border-b border-white/5 shrink-0">
+                      <span className="text-[10px] text-slate-600 flex items-center gap-1.5">
+                        <ImageOff className="h-3 w-3" /> No photo attached
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="p-4 flex flex-col gap-3 flex-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold bg-white/5 text-slate-300 border border-white/10 px-2 py-0.5 rounded uppercase tracking-wide">
+                        {sectorEmoji} {complaint.sector || complaint.category || "General"}
+                      </span>
+                      {complaint.severity_index != null && (
+                        <span className={`text-[10px] font-black px-2 py-0.5 rounded border font-mono ${severityColor}`}>
+                          SEV {complaint.severity_index}/10
+                        </span>
+                      )}
+                    </div>
+
+                    <p className="text-sm text-slate-300 leading-relaxed line-clamp-3">
+                      {complaint.english_translation || "No description provided."}
+                    </p>
+
+                    <div className="mt-auto pt-3 border-t border-white/5 flex items-center justify-between text-[10px] text-slate-500 font-mono">
+                      <span className="flex items-center gap-1">
+                        <MapPin className="h-3 w-3 text-slate-600" />
+                        {complaint.location_node || "Unknown"}
+                      </span>
+                      <span>
+                        {complaint.submitted_at
+                          ? new Date(complaint.submitted_at).toLocaleDateString("en-IN", {day:"2-digit",month:"short",year:"2-digit"})
+                          : "—"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
     </div>
   );
