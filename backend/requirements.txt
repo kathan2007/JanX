@@ -13,5 +13,4 @@ gunicorn==22.0.0
 requests==2.32.3
 whitenoise==6.7.0
 protobuf==4.25.3
-grpcio==1.64.1
 # Added specific pins to solve Render dependency backtracking issues.
