@@ -129,9 +129,13 @@ if not firebase_admin._apps:
         firebase_creds_json = os.getenv('FIREBASE_CREDENTIALS_JSON')
         if firebase_creds_json:
             cred_dict = json.loads(firebase_creds_json)
+            
+            # 🔥 MAGIC LINE: JSON load hone ke baad private key ke bad formatting ko fix karo
+            if 'private_key' in cred_dict:
+                cred_dict['private_key'] = cred_dict['private_key'].replace('\\n', '\n')
+            
             cred = credentials.Certificate(cred_dict)
             firebase_admin.initialize_app(cred)
             print("🔥 Firebase Admin SDK initialized from ENV variable.")
         else:
             print("⚠️ Firebase credentials missing – auth endpoints will fail.")
-# ─────────────────────────────────────────────────────────────────────────────
