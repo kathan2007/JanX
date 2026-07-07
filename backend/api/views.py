@@ -1,9 +1,13 @@
+import os
+import time
 import logging
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from google.cloud import bigquery
 from django.conf import settings
+from django.core.files.storage import default_storage
+from django.core.files.base import ContentFile
 from firebase_admin import auth
 from api.models import DevelopmentRequest
 
@@ -65,43 +69,47 @@ class SubmitRequestAPI(APIView):
         if not is_sandbox:
             try:
                 decoded_token = auth.verify_id_token(id_token)
-                # Future use: user_email = decoded_token.get('email')
             except Exception as e:
                 logger.warning(f"Firebase token verification failed: {e}")
                 return Response({"error": "Unauthorized: Invalid or expired Firebase token."}, status=status.HTTP_401_UNAUTHORIZED)
         else:
             logger.info("Sandbox mode — bypassing Firebase token verification.")
 
-
-
-        # ✅ STEP 2: Authenticated — Pipeline Logic Shuru
+        # ✅ STEP 2: Authenticated — Pipeline Logic
         state = request.data.get('state')
         if not state:
             return Response({"error": "The 'state' field is required."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # 🔥 Extract sector (frontend-selected department)
         sector = request.data.get('sector', '').upper() or None
         if sector and sector not in VALID_SECTORS:
             logger.warning(f"Invalid sector '{sector}' received — storing as-is.")
 
-        # 🔥 Extract image_url (Frontend already uploaded to Firebase Storage & sends back the URL)
-        image_url = request.data.get('image_url') or None
+        # image_url and audio_url resolved after file save / fallback below
+        image_url = None
+        audio_url = None
 
         normalized_text = ""
         raw_input_type = "text"
 
-        geo_lat = request.data.get('geo_lat')
-        geo_lng = request.data.get('geo_lng')
+        geo_lat = request.data.get('geo_lat') or None
+        geo_lng = request.data.get('geo_lng') or None
+
+        # Coerce and validate — reject only if a value is present but clearly invalid
         if geo_lat is not None:
             try:
-                float(geo_lat)
+                geo_lat = float(geo_lat)
+                if not (-90.0 <= geo_lat <= 90.0):
+                    return Response({"error": "geo_lat out of range (−90 to 90)."}, status=status.HTTP_400_BAD_REQUEST)
             except (ValueError, TypeError):
-                return Response({"error": "Invalid geo_lat coordinates. Must be a float number."}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({"error": "Invalid geo_lat. Must be a decimal number."}, status=status.HTTP_400_BAD_REQUEST)
+
         if geo_lng is not None:
             try:
-                float(geo_lng)
+                geo_lng = float(geo_lng)
+                if not (-180.0 <= geo_lng <= 180.0):
+                    return Response({"error": "geo_lng out of range (−180 to 180)."}, status=status.HTTP_400_BAD_REQUEST)
             except (ValueError, TypeError):
-                return Response({"error": "Invalid geo_lng coordinates. Must be a float number."}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({"error": "Invalid geo_lng. Must be a decimal number."}, status=status.HTTP_400_BAD_REQUEST)
 
         if 'text' in request.data:
             normalized_text = request.data.get('text')
@@ -115,7 +123,7 @@ class SubmitRequestAPI(APIView):
 
             if audio_file.size > MAX_FILE_SIZE_AUDIO:
                 return Response({"error": f"Audio file size exceeds limit of {MAX_FILE_SIZE_AUDIO / (1024*1024)}MB."}, status=status.HTTP_400_BAD_REQUEST)
-            
+
             content_type = getattr(audio_file, 'content_type', '')
             if content_type not in ALLOWED_AUDIO_TYPES:
                 name = audio_file.name.lower()
@@ -126,6 +134,17 @@ class SubmitRequestAPI(APIView):
             normalized_text = transcribe_regional_audio(audio_file)
             if normalized_text is None:
                 return Response({"error": "Audio transcription failed. Please try again or submit as text."}, status=status.HTTP_502_BAD_GATEWAY)
+
+            # 💾 Save audio locally to media/complaints/ — bypasses Firebase Storage CORS entirely
+            try:
+                audio_file.seek(0)  # rewind after transcription read
+                ext = os.path.splitext(audio_file.name)[-1] or '.wav'
+                save_path = f"complaints/{int(time.time() * 1000)}{ext}"
+                saved_name = default_storage.save(save_path, ContentFile(audio_file.read()))
+                audio_url = settings.MEDIA_URL + saved_name  # relative — served via Vite proxy
+                logger.info(f"Audio saved locally: {audio_url}")
+            except Exception as file_err:
+                logger.warning(f"Local audio save failed: {file_err}")
 
         elif 'image' in request.FILES:
             raw_input_type = "image"
@@ -145,6 +164,18 @@ class SubmitRequestAPI(APIView):
             if not normalized_text:
                 return Response({"error": "Failed to analyze image content via Gemini."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+            # 💾 Save image locally to media/complaints/ — bypasses Firebase Storage CORS entirely
+            try:
+                image_file.seek(0)  # rewind after Gemini read
+                ext = os.path.splitext(image_file.name)[-1] or '.jpg'
+                save_path = f"complaints/{int(time.time() * 1000)}{ext}"
+                saved_name = default_storage.save(save_path, ContentFile(image_file.read()))
+                image_url = settings.MEDIA_URL + saved_name  # relative — served via Vite proxy
+                logger.info(f"Image saved locally: {image_url}")
+            except Exception as file_err:
+                logger.warning(f"Local image save failed: {file_err} — using frontend URL fallback")
+                image_url = request.data.get('image_url') or None
+
         else:
             return Response({"error": "Provide one of: text, audio, or image."}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -158,19 +189,43 @@ class SubmitRequestAPI(APIView):
 
         embedding_vector = generate_text_embedding(english_translation)
 
-        image_url = request.data.get('image_url') or request.POST.get('image_url')
+        # For text/audio submissions, check if frontend sent an image_url
+        if not image_url:
+            image_url = request.data.get('image_url') or request.POST.get('image_url') or None
 
-        db_success = stream_payload_to_bigquery(
-            structured_payload, embedding_vector, raw_input_type,
-            geo_lat=geo_lat, geo_lng=geo_lng,
-            sector=sector,
-            image_url=image_url,
-        )
+        import threading
+        import uuid
 
-        if db_success:
-            response_data = {**structured_payload, "sector": sector, "image_url": image_url, "status": "Pending"}
-            return Response(response_data, status=status.HTTP_201_CREATED)
-        return Response({"error": "Failed to stream the record to BigQuery."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        request_id = str(uuid.uuid4())
+
+        # Fire-and-forget streaming payload insertion in a background thread
+        threading.Thread(
+            target=stream_payload_to_bigquery,
+            args=(structured_payload, embedding_vector, raw_input_type),
+            kwargs={
+                "geo_lat": geo_lat,
+                "geo_lng": geo_lng,
+                "sector": sector,
+                "image_url": image_url,
+                "audio_url": audio_url,
+                "status": "Pending",
+                "request_id": request_id
+            },
+            daemon=True
+        ).start()
+
+        # Build response immediately
+        response_data = {
+            **structured_payload,
+            "request_id": request_id,
+            "sector": sector,
+            "image_url": image_url,
+            "audio_url": audio_url,
+            "status": "Pending",
+            "raw_input_type": raw_input_type
+        }
+        return Response(response_data, status=status.HTTP_201_CREATED)
+
 
 
 class GetRankedProjectsAPI(APIView):
@@ -182,7 +237,7 @@ class GetRankedProjectsAPI(APIView):
             return Response({"error": "Missing required query parameter: state"}, status=status.HTTP_400_BAD_REQUEST)
 
         client = bigquery.Client(project=settings.GCP_PROJECT_ID)
-        
+
         query = f'''
         SELECT
             c.category,
@@ -202,7 +257,7 @@ class GetRankedProjectsAPI(APIView):
         WHERE c.state = @state
         GROUP BY c.category, c.location_node
         '''
-        
+
         job_config = bigquery.QueryJobConfig(
             query_parameters=[bigquery.ScalarQueryParameter("state", "STRING", state)]
         )
@@ -220,10 +275,10 @@ class GetRankedProjectsAPI(APIView):
             mean_severity = row.mean_severity
             distance_to_nearest_facility = row.distance_to_nearest_facility
             population_impact_factor = row.population_impact_factor
-            
+
             complaint_density_score = min((volume * mean_severity) * 10, 100)
-            priority_score = max(0, min(int((0.4 * complaint_density_score) + 
-                                             (0.3 * distance_to_nearest_facility) + 
+            priority_score = max(0, min(int((0.4 * complaint_density_score) +
+                                             (0.3 * distance_to_nearest_facility) +
                                              (0.3 * population_impact_factor)), 100))
 
             footprint = (
@@ -231,7 +286,7 @@ class GetRankedProjectsAPI(APIView):
                 f"Distance to Facility Gap: {distance_to_nearest_facility:.1f}, "
                 f"Population Impact Factor: {population_impact_factor:.1f}."
             )
-            
+
             try:
                 ai_justification = generate_ai_justification(footprint)
             except Exception as e:
@@ -245,7 +300,6 @@ class GetRankedProjectsAPI(APIView):
                     "lng": float(row.representative_lng)
                 }
 
-            # Sync with SQLite DevelopmentRequest model
             project_title = f"JanX Redressal: {row.category} at {row.location_node}"
             dev_req, created = DevelopmentRequest.objects.get_or_create(
                 title=project_title,
@@ -293,7 +347,7 @@ class GetComplaintsAPI(APIView):
 
         sector_filter = request.query_params.get('sector', '').upper() or None
         limit = int(request.query_params.get('limit', 50))
-        limit = min(limit, 200)  # cap at 200
+        limit = min(limit, 200)
 
         client = bigquery.Client(project=settings.GCP_PROJECT_ID)
 
@@ -313,6 +367,7 @@ class GetComplaintsAPI(APIView):
             CAST(geo_lat AS FLOAT64) as geo_lat,
             CAST(geo_lng AS FLOAT64) as geo_lng,
             image_url,
+            audio_url,
             status
         FROM `{settings.GCP_PROJECT_ID}.{settings.BQ_DATASET}.citizen_complaints` c
         WHERE c.state = @state
@@ -344,9 +399,10 @@ class GetComplaintsAPI(APIView):
                     "geo_lat":              float(row.geo_lat) if row.geo_lat is not None else None,
                     "geo_lng":              float(row.geo_lng) if row.geo_lng is not None else None,
                     "image_url":            row.image_url,
+                    "audio_url":            getattr(row, 'audio_url', None),
                     "status":               row.status or "Pending",
                 }
-                # AI justification fallback for frontend modal
+
                 sev = row_dict.get('severity_index', 5)
                 cat = row_dict.get('category', 'General')
                 loc = row_dict.get('location_node', 'local area')
@@ -369,7 +425,6 @@ class DevelopmentRequestDetailAPI(APIView):
     """PATCH /api/requests/<id>/ — updates status of a development request."""
 
     def patch(self, request, pk, *args, **kwargs):
-        # 🔐 Firebase Authentication Check
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return Response({"error": "Unauthorized: No Firebase token provided."}, status=status.HTTP_401_UNAUTHORIZED)

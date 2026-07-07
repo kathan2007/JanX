@@ -15,7 +15,9 @@ def stream_payload_to_bigquery(
     geo_lng=None,
     sector=None,
     image_url=None,
+    audio_url=None,
     status="Pending",
+    request_id=None,
 ):
     """Streams a structured complaint record into BigQuery, falling back to a Load Job if streaming is disabled."""
     client = bigquery.Client(project=settings.GCP_PROJECT_ID)
@@ -35,7 +37,7 @@ def stream_payload_to_bigquery(
             pass
 
     row_to_insert = [{
-        "request_id":           str(uuid.uuid4()),
+        "request_id":           request_id or str(uuid.uuid4()),
         "category":             structured_data.get("category"),
         "location_node":        structured_data.get("location_node"),
         "state":                structured_data.get("state"),
@@ -49,8 +51,10 @@ def stream_payload_to_bigquery(
         # 🔥 Extended fields — frontend sector + photo URL + status
         "sector":               sector or None,
         "image_url":            image_url or None,
+        "audio_url":            audio_url or None,
         "status":               status,
     }]
+
 
     logger.info(f"Attempting to insert row into BigQuery {table_id} | sector={sector} | has_image={bool(image_url)} | status={status}...")
 

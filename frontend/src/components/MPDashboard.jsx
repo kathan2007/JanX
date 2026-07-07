@@ -60,6 +60,40 @@ export default function MPDashboard({ selectedState, currentUser, onLogOut }) {
     return `${formattedDate} • ⏰ ${formattedTime}`;
   };
 
+  // Helper: append &alt=media to any bare Firebase Storage URL
+  const normalizeMediaUrl = (url) => {
+    if (!url) return url;
+    if (url.includes("firebasestorage.googleapis.com") && !url.includes("alt=media")) {
+      return `${url}${url.includes('?') ? '&' : '?'}alt=media`;
+    }
+    return url;
+  };
+
+  const fetchLiveFeed = () => {
+    setFeedLoading(true);
+    setFeedError("");
+    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
+    const params = { state: selectedState, limit: 30 };
+    if (selectedSector !== "ALL") params.sector = selectedSector;
+    axios.get(`${API_BASE_URL}/api/get-complaints/`, { params, timeout: 15000 })
+      .then(r => {
+        // Normalize both image_url and audio_url — adds &alt=media to Firebase Storage links
+        const mappedData = (r.data || []).map(item => ({
+          ...item,
+          image_url: normalizeMediaUrl(item.image_url),
+          audio_url: normalizeMediaUrl(item.audio_url),
+        }));
+        setLiveComplaints(mappedData);
+        setComplaints(mappedData);
+        setFeedError("");
+      })
+      .catch((err) => {
+        console.error("Live feed fetch error:", err);
+        setFeedError("Live feed unavailable.");
+      })
+      .finally(() => setFeedLoading(false));
+  };
+
   const handleStatusChange = async (requestId, newStatus) => {
     try {
       const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
@@ -78,12 +112,13 @@ export default function MPDashboard({ selectedState, currentUser, onLogOut }) {
     
     // Always update local state for a smooth UI experience
     setComplaints(prev => prev.map(c => c.request_id === requestId ? { ...c, status: newStatus } : c));
+    setLiveComplaints(prev => prev.map(c => c.request_id === requestId ? { ...c, status: newStatus } : c));
     if (selectedComplaint && selectedComplaint.request_id === requestId) {
       setSelectedComplaint(prev => ({ ...prev, status: newStatus }));
     }
   };
 
-  // Sync state data on state selection change
+  // Sync state data on state selection change and auto-refresh live complaints
   useEffect(() => {
     if (stateData) {
       setPriorities(stateData.priorities.map(p => ({
@@ -97,7 +132,9 @@ export default function MPDashboard({ selectedState, currentUser, onLogOut }) {
     }
     setActiveCardId(null);
     setDrawerOpen(false);
-  }, [selectedState, stateData]);
+
+    fetchLiveFeed();
+  }, [selectedState, selectedSector, stateData]);
 
   // Leaflet Map Initialization Hook — depends only on selectedState to avoid
   // infinite re-renders from mapCenter array creating a new reference each render.
@@ -136,11 +173,16 @@ export default function MPDashboard({ selectedState, currentUser, onLogOut }) {
 
     mapRef.current = map;
 
-    // Add CartoDB Dark Matter tile layer
+    // Add CartoDB Dark Matter tile layer — no crossOrigin flag (CartoDB uses wildcard CORS)
     L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+      subdomains: "abcd",
       maxZoom: 20
     }).addTo(map);
+
+    // invalidateSize twice: once after React paint, once after any CSS transition delay
+    setTimeout(() => { if (mapRef.current) mapRef.current.invalidateSize(); }, 200);
+    setTimeout(() => { if (mapRef.current) mapRef.current.invalidateSize(); }, 800);
 
     // Create marker layers group
     const markerGroup = L.layerGroup().addTo(map);
@@ -251,9 +293,9 @@ export default function MPDashboard({ selectedState, currentUser, onLogOut }) {
           });
           marker.addTo(markerGroup);
 
-          if (isSelected) {
-            map.setView([complaint.geo_lat, complaint.geo_lng], map.getZoom(), { animate: true });
-            setTimeout(() => marker.openPopup(), 200);
+          if (isSelected && mapRef.current) {
+            mapRef.current.setView([complaint.geo_lat, complaint.geo_lng], mapRef.current.getZoom(), { animate: true });
+            setTimeout(() => marker.openPopup(), 250);
           }
         }
       });
@@ -296,10 +338,42 @@ export default function MPDashboard({ selectedState, currentUser, onLogOut }) {
     setDrawerOpen(true);
   };
 
-  // Status Badge Updater buttons
-  const changePriorityStatus = (newStatus) => {
+  // Status Badge Updater buttons for prioritized SQLite requests
+  const changePriorityStatus = async (newStatus) => {
     const active = priorities.find(p => p.id === activeCardId);
     if (!active) return;
+
+    try {
+      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
+      let token = "mock-jwt-sandbox-token-string-12345";
+      if (currentUser && typeof currentUser.getIdToken === "function") {
+        try {
+          token = await currentUser.getIdToken();
+        } catch (err) {
+          console.warn("Failed to get Firebase token, utilizing sandbox default:", err);
+        }
+      }
+
+      // Map local status text to backend SQLite choice limits
+      const dbStatusMap = {
+        "Pending": "PENDING",
+        "In Progress": "IN_PROGRESS",
+        "Resolved": "COMPLETED"
+      };
+      const dbStatus = dbStatusMap[newStatus] || "PENDING";
+
+      await axios.patch(`${API_BASE_URL}/api/requests/${active.id}/`, 
+        { status: dbStatus },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      setToastMessage(`Status updated to "${newStatus}"! SQLite synchronized.`);
+      setTimeout(() => setToastMessage(""), 4000);
+    } catch (err) {
+      console.error("Failed to sync SQLite status update:", err);
+      setToastMessage(`Status updated to "${newStatus}" locally.`);
+      setTimeout(() => setToastMessage(""), 4000);
+    }
 
     setPriorities(prev => prev.map(p => {
       if (p.id === activeCardId) {
@@ -307,10 +381,6 @@ export default function MPDashboard({ selectedState, currentUser, onLogOut }) {
       }
       return p;
     }));
-
-    // Toast message trigger
-    setToastMessage(`Status updated to "${newStatus}"! Prioritization index synchronized.`);
-    setTimeout(() => setToastMessage(""), 4000);
   };
 
   // Find currently active priority details
@@ -930,6 +1000,22 @@ export default function MPDashboard({ selectedState, currentUser, onLogOut }) {
                 </div>
               )}
 
+              {selectedComplaint.audio_url && (
+                <div>
+                  <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Voice Recording</h4>
+                  <div className="bg-slate-900/80 border border-blue-500/20 rounded-xl p-3 flex flex-col gap-2">
+                    <span className="text-[9px] text-blue-400 font-bold uppercase tracking-wider font-mono flex items-center gap-1.5">
+                      🔊 Citizen Voice Evidence
+                    </span>
+                    <audio
+                      src={normalizeMediaUrl(selectedComplaint.audio_url)}
+                      controls
+                      className="w-full focus:outline-none"
+                    />
+                  </div>
+                </div>
+              )}
+
               {/* ✨ AI Justification Panel (Cyber Neon Border) */}
               <div className="border border-purple-500/30 bg-purple-500/5 rounded-xl p-4">
                 <div className="flex items-center gap-2 text-purple-400 font-semibold text-sm mb-1.5">
@@ -997,20 +1083,7 @@ export default function MPDashboard({ selectedState, currentUser, onLogOut }) {
             </span>
           </div>
           <button
-            onClick={() => {
-              setFeedLoading(true);
-              setFeedError(""); // Reset any prior errors
-              const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
-              const params = { state: selectedState, limit: 30 };
-              if (selectedSector !== "ALL") params.sector = selectedSector;
-              axios.get(`${API_BASE_URL}/api/get-complaints/`, { params, timeout: 15000 })
-                .then(r => {
-                  setLiveComplaints(r.data || []);
-                  setFeedError("");
-                })
-                .catch(() => setFeedError("Live feed unavailable."))
-                .finally(() => setFeedLoading(false));
-            }}
+            onClick={fetchLiveFeed}
             className="flex items-center gap-1.5 text-[11px] font-bold text-slate-400 hover:text-white border border-white/10 hover:border-white/25 px-3 py-1.5 rounded-lg transition-all cursor-pointer"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${feedLoading ? "animate-spin" : ""}`} />
@@ -1086,20 +1159,73 @@ export default function MPDashboard({ selectedState, currentUser, onLogOut }) {
                   )}
 
                   <div className="p-4 flex flex-col gap-3 flex-1">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between gap-1.5 flex-wrap">
                       <span className="text-[10px] font-bold bg-white/5 text-slate-300 border border-white/10 px-2 py-0.5 rounded uppercase tracking-wide">
                         {sectorEmoji} {complaint.sector || complaint.category || "General"}
                       </span>
-                      {complaint.severity_index != null && (
-                        <span className={`text-[10px] font-black px-2 py-0.5 rounded border font-mono ${severityColor}`}>
-                          SEV {complaint.severity_index}/10
+                      <div className="flex items-center gap-1.5 ml-auto">
+                        {complaint.severity_index != null && (
+                          <span className={`text-[10px] font-black px-2 py-0.5 rounded border font-mono ${severityColor}`}>
+                            SEV {complaint.severity_index}/10
+                          </span>
+                        )}
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold border uppercase font-mono ${
+                          complaint.status === "In Progress"
+                            ? "text-amber-400 border-amber-500/25 bg-amber-500/10"
+                            : complaint.status === "Resolved"
+                              ? "text-emerald-400 border-emerald-500/25 bg-emerald-500/10"
+                              : "text-blue-400 border-blue-500/25 bg-blue-500/10"
+                        }`}>
+                          {complaint.status || "Pending"}
                         </span>
-                      )}
+                      </div>
                     </div>
 
-                    <p className="text-sm text-slate-300 leading-relaxed line-clamp-3">
+                    <p className="text-sm text-slate-300 leading-relaxed text-left">
                       {complaint.english_translation || "No description provided."}
                     </p>
+
+                    {complaint.audio_url && (
+                      <div className="bg-slate-900/60 border border-white/5 rounded-xl p-2 flex flex-col gap-1 inline-block shrink-0">
+                        <span className="text-[9px] text-blue-400 font-bold uppercase tracking-wider font-mono">
+                          🔊 Voice Attachment Description
+                        </span>
+                        <audio 
+                          src={complaint.audio_url} 
+                          controls 
+                          className="w-full h-8 text-xs focus:outline-none" 
+                        />
+                      </div>
+                    )}
+
+                    <div className="flex items-center gap-2 mt-1">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleStatusChange(complaint.request_id, 'In Progress');
+                        }}
+                        className={`flex-1 py-1.5 px-2 rounded-lg border text-[10px] font-bold transition-all cursor-pointer text-center ${
+                          complaint.status === 'In Progress'
+                            ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+                            : 'bg-white/5 text-slate-400 border-white/10 hover:bg-amber-500/10 hover:text-amber-400'
+                        }`}
+                      >
+                        ⚙️ In Progress
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleStatusChange(complaint.request_id, 'Resolved');
+                        }}
+                        className={`flex-1 py-1.5 px-2 rounded-lg border text-[10px] font-bold transition-all cursor-pointer text-center ${
+                          complaint.status === 'Resolved'
+                            ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                            : 'bg-white/5 text-slate-400 border-white/10 hover:bg-emerald-500/10 hover:text-emerald-400'
+                        }`}
+                      >
+                        ✅ Resolved
+                      </button>
+                    </div>
 
                     <div className="mt-auto pt-3 border-t border-white/5 flex items-center justify-between text-[10px] text-slate-500 font-mono">
                       <span className="flex items-center gap-1">

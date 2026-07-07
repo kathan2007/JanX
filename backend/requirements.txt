@@ -1,9 +1,11 @@
 django>=4.2
 djangorestframework
+django-cors-headers
 google-cloud-bigquery>=3.0.0
 google-cloud-speech>=2.0.0
 google-generativeai>=0.3.0
+firebase-admin
 python-dotenv
 gunicorn
-uvicorn
 requests
+whitenoise
