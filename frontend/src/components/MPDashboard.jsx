@@ -72,7 +72,7 @@ export default function MPDashboard({ selectedState, currentUser, onLogOut }) {
   const fetchLiveFeed = () => {
     setFeedLoading(true);
     setFeedError("");
-    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
+    const API_BASE_URL = import.meta.env.VITE_API_URL || "https://janx.onrender.com";
     const params = { state: selectedState, limit: 30 };
     if (selectedSector !== "ALL") params.sector = selectedSector;
     axios.get(`${API_BASE_URL}/api/get-complaints/`, { params, timeout: 15000 })
