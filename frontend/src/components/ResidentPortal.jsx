@@ -152,34 +152,41 @@ export default function ResidentPortal({ selectedState, onTriggerAuthModal, curr
       let uploadedImageUrl = imagePreview || null;
 
       // 3. Make HTTP request to configured Backend API
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
-      let categoryResponse = "Infrastructure Gap";
+      // 🎯 Render Server ka direct URL fallback mein set kiya hai taaki local/vercel dono jagah safe rahe
+const API_BASE_URL = import.meta.env.VITE_API_URL || "https://janx.onrender.com";
+let categoryResponse = "Infrastructure Gap";
 
-      try {
-        const response = await axios.post(`${API_BASE_URL}/api/submit-request/`, formData, {
-          headers: {
-            Authorization: `Bearer ${firebaseIdToken}`,
-            "Content-Type": "multipart/form-data",
-          },
-        });
-        categoryResponse = response.data?.category || "Request Accepted";
-        // Use Django-returned local media URL if available
-        if (response.data?.image_url) uploadedImageUrl = response.data.image_url;
-      } catch (axiosError) {
-        console.warn("Axios API Call Failed. Simulating local routing fallback since backend server is not active.");
-        // Simulated local categorizer logic based on input keywords
-        const lowerText = textInput.toLowerCase();
-        if (lowerText.includes("water") || lowerText.includes("canal") || lowerText.includes("pipe")) {
-          categoryResponse = "Water Supply";
-        } else if (lowerText.includes("road") || lowerText.includes("pothole") || lowerText.includes("highway")) {
-          categoryResponse = "Roads & Transport";
-        } else if (lowerText.includes("school") || lowerText.includes("study") || lowerText.includes("roof") || lowerText.includes("education")) {
-          categoryResponse = "Education";
-        } else if (lowerText.includes("clinic") || lowerText.includes("health") || lowerText.includes("doctor") || lowerText.includes("hospital")) {
-          categoryResponse = "Healthcare";
-        } else {
-          categoryResponse = "General Grievance";
-        }
+try {
+  // Axios POST request directly live Render server par hit karegi
+  const response = await axios.post(`${API_BASE_URL}/api/submit-request/`, formData, {
+    headers: {
+      Authorization: `Bearer ${firebaseIdToken}`,
+      "Content-Type": "multipart/form-data",
+    },
+    timeout: 60000, // ⏱️ 60 seconds timeout taaki Render spin-up delay handle ho sake
+  });
+  
+  categoryResponse = response.data?.category || "Request Accepted";
+  // Use Django-returned local media URL if available
+  if (response.data?.image_url) uploadedImageUrl = response.data.image_url;
+
+} catch (axiosError) {
+  console.warn("Axios API Call Failed. Simulating local routing fallback since backend server is not active.", axiosError);
+  
+  // Simulated local categorizer logic based on input keywords (Fallback Mechanism)
+  const lowerText = textInput.toLowerCase();
+  if (lowerText.includes("water") || lowerText.includes("canal") || lowerText.includes("pipe")) {
+    categoryResponse = "Water Supply";
+  } else if (lowerText.includes("road") || lowerText.includes("pothole") || lowerText.includes("highway")) {
+    categoryResponse = "Roads & Transport";
+  } else if (lowerText.includes("school") || lowerText.includes("study") || lowerText.includes("roof") || lowerText.includes("education")) {
+    categoryResponse = "Education";
+  } else if (lowerText.includes("clinic") || lowerText.includes("health") || lowerText.includes("doctor") || lowerText.includes("hospital")) {
+    categoryResponse = "Healthcare";
+  } else {
+    categoryResponse = "General Grievance";
+  }
+}
         
         // Show demo notification along with state info
         setTokenPreview(firebaseIdToken.substring(0, 20) + "... [Verified locally]");
