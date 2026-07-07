@@ -54,6 +54,9 @@ def init_bq():
         if "status" not in existing_fields:
             new_fields.append(bigquery.SchemaField("status", "STRING", mode="NULLABLE"))
             schema_changed = True
+        if "sector" not in existing_fields:
+            new_fields.append(bigquery.SchemaField("sector", "STRING", mode="NULLABLE"))
+            schema_changed = True
         
         if schema_changed:
             table.schema = new_fields
