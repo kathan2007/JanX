@@ -396,8 +396,8 @@ class GetComplaintsAPI(APIView):
         if sector_filter:
             params.append(bigquery.ScalarQueryParameter("sector", "STRING", sector_filter))
 
-        # 🛠️ Fixed Class Typo: Using correct QueryJobConfiguration reference
-        job_config = bigquery.QueryJobConfiguration(query_parameters=params)
+        # 🛠️ FIXED: Configuration class ka sahi naam 'QueryJobConfig' hai
+        job_config = bigquery.QueryJobConfig(query_parameters=params)
 
         try:
             query_job = client.query(query, job_config=job_config)

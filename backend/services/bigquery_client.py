@@ -1,6 +1,9 @@
 import uuid
+import json
+import os
 from datetime import datetime, timezone
 from google.cloud import bigquery
+from google.oauth2 import service_account
 from django.conf import settings
 import logging
 
@@ -20,8 +23,26 @@ def stream_payload_to_bigquery(
     request_id=None,
 ):
     """Streams a structured complaint record into BigQuery, falling back to a Load Job if streaming is disabled."""
-    client = bigquery.Client(project=settings.GCP_PROJECT_ID)
+    
+    # 🎯 Render background thread authentication pipeline secure karna
+    gcp_json = os.environ.get("GOOGLE_CREDENTIALS_JSON")
+
+    if gcp_json:
+        try:
+            # Render context JSON parse matching service account
+            credentials_dict = json.loads(gcp_json)
+            credentials = service_account.Credentials.from_service_account_info(credentials_dict)
+            client = bigquery.Client(project=settings.GCP_PROJECT_ID, credentials=credentials)
+        except Exception as credential_error:
+            logger.error(f"Background stream failed to parse credentials: {credential_error}")
+            client = bigquery.Client(project=settings.GCP_PROJECT_ID)
+    else:
+        # Local computer fallback default setup
+        client = bigquery.Client(project=settings.GCP_PROJECT_ID)
+
     table_id = f"{settings.GCP_PROJECT_ID}.{settings.BQ_DATASET}.citizen_complaints"
+    
+    # ... Iske niche tumhara baaki ka insertion/streaming logic (rows_to_insert, client.insert_rows) chalne do ...
 
     lat_val = None
     lng_val = None
