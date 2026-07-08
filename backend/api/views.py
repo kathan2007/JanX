@@ -10,6 +10,8 @@ from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
 from firebase_admin import auth
 from api.models import DevelopmentRequest
+from google.oauth2 import service_account
+import json
 
 from services.gemini_service import (
     structure_and_translate_complaint,
@@ -349,9 +351,23 @@ class GetComplaintsAPI(APIView):
         limit = int(request.query_params.get('limit', 50))
         limit = min(limit, 200)
 
-        client = bigquery.Client(project=settings.GCP_PROJECT_ID)
+        # 🎯 1. Live Render Environment dynamically authenticates using JSON String
+        gcp_json = os.environ.get("GOOGLE_CREDENTIALS_JSON")
 
-        sector_clause = "AND c.sector = @sector" if sector_filter else ""
+        if gcp_json:
+            try:
+                credentials_dict = json.loads(gcp_json)
+                credentials = service_account.Credentials.from_service_account_info(credentials_dict)
+                client = bigquery.Client(project=settings.GCP_PROJECT_ID, credentials=credentials)
+            except Exception as credential_error:
+                logger.error(f"Failed to load credentials from GOOGLE_CREDENTIALS_JSON string: {credential_error}")
+                client = bigquery.Client(project=settings.GCP_PROJECT_ID)
+        else:
+            # Local machine/development setup safe fallback
+            client = bigquery.Client(project=settings.GCP_PROJECT_ID)
+
+        # 📊 2. Dynamic Query String and Parameter Mapping
+        sector_clause = f"AND UPPER(c.sector) = @sector" if sector_filter else ""
 
         query = f'''
         SELECT
@@ -380,11 +396,13 @@ class GetComplaintsAPI(APIView):
         if sector_filter:
             params.append(bigquery.ScalarQueryParameter("sector", "STRING", sector_filter))
 
-        job_config = bigquery.QueryJobConfig(query_parameters=params)
+        # 🛠️ Fixed Class Typo: Using correct QueryJobConfiguration reference
+        job_config = bigquery.QueryJobConfiguration(query_parameters=params)
 
         try:
             query_job = client.query(query, job_config=job_config)
             complaints = []
+            
             for row in query_job.result():
                 row_dict = {
                     "request_id":           row.request_id,
@@ -403,6 +421,7 @@ class GetComplaintsAPI(APIView):
                     "status":               row.status or "Pending",
                 }
 
+                # Generate dynamic AI justification parameters on the fly
                 sev = row_dict.get('severity_index', 5)
                 cat = row_dict.get('category', 'General')
                 loc = row_dict.get('location_node', 'local area')
@@ -412,14 +431,15 @@ class GetComplaintsAPI(APIView):
                     f"infrastructure risk parameters for {cat} in {loc}."
                 )
                 complaints.append(row_dict)
+                
             return Response(complaints, status=status.HTTP_200_OK)
+            
         except Exception as e:
             logger.error(f"GetComplaintsAPI BigQuery query failed: {str(e)}")
             return Response(
                 {"error": f"BigQuery query failed: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-
 
 class DevelopmentRequestDetailAPI(APIView):
     """PATCH /api/requests/<id>/ — updates status of a development request."""
