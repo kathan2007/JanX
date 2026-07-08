@@ -1180,7 +1180,13 @@ export default function MPDashboard({ selectedState, currentUser, onLogOut }) {
                           🔊 Voice Attachment Description
                         </span>
                         <audio
-                          src={normalizeMediaUrl(complaint.audio_url)}
+                          src={
+                            complaint.audio_url
+                              ? (complaint.audio_url.startsWith('http')
+                                ? complaint.audio_url
+                                : `https://janx.onrender.com${complaint.audio_url.startsWith('/') ? complaint.audio_url : '/' + complaint.audio_url}`)
+                              : ""
+                          }
                           controls
                           className="w-full h-8 text-xs focus:outline-none"
                         />
