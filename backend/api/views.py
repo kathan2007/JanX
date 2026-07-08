@@ -497,13 +497,35 @@ class UpdateStatusAPI(APIView):
     def patch(self, request, *args, **kwargs):
         request_id = request.data.get('request_id')
         new_status = request.data.get('status')
+        
         if not request_id or not new_status:
             return Response(
                 {"error": "Fields 'request_id' and 'status' are required."},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        client = bigquery.Client(project=settings.GCP_PROJECT_ID)
+        try:
+            # 1. Settings se valid credentials load karo 
+            credentials = settings.get_bigquery_credentials()
+            
+            # 2. Client ko credentials ke sath initialize karo
+            client = bigquery.Client(
+                project=settings.GCP_PROJECT_ID,
+                credentials=credentials
+            )
+            
+            # --- Yahan se tumhara aage ka query/update logic shuru hoga ---
+            # E.g., query = f"UPDATE ... SET status = '{new_status}' WHERE id = '{request_id}'"
+            # query_job = client.query(query)
+            # query_job.result()
+            
+            # (Agar aage ka code likha hua hai toh use iske niche chalne do)
+            
+        except Exception as e:
+            return Response(
+                {"error": f"BigQuery Update Failed: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
         query = f'''
         UPDATE `{settings.GCP_PROJECT_ID}.{settings.BQ_DATASET}.citizen_complaints`
         SET status = @status
