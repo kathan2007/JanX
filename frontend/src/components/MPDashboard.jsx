@@ -1,16 +1,16 @@
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import { STATE_DASHBOARD_DATA } from "../data/mockData";
-import { 
-  Users, 
-  AlertOctagon, 
-  Activity, 
-  MapPin, 
-  Layers, 
-  FileCheck2, 
-  Cpu, 
-  ChevronUp, 
-  ChevronDown, 
+import {
+  Users,
+  AlertOctagon,
+  Activity,
+  MapPin,
+  Layers,
+  FileCheck2,
+  Cpu,
+  ChevronUp,
+  ChevronDown,
   HelpCircle,
   FolderLock,
   CheckCircle,
@@ -26,7 +26,7 @@ import "leaflet/dist/leaflet.css";
 
 export default function MPDashboard({ selectedState, currentUser, onLogOut }) {
   const stateData = STATE_DASHBOARD_DATA[selectedState];
-  
+
   // Local priorities list state to handle interactive status modifications
   const [priorities, setPriorities] = useState([]);
   const [activeCardId, setActiveCardId] = useState(null);
@@ -96,12 +96,14 @@ export default function MPDashboard({ selectedState, currentUser, onLogOut }) {
 
   const handleStatusChange = async (requestId, newStatus) => {
     try {
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
-      await axios.patch(`${API_BASE_URL}/api/update-status`, {
+      // Agat VITE_API_BASE_URL khali mila, toh direct Render ka URL fallback ban jayega
+      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://janx.onrender.com";
+
+      await axios.patch(`${API_BASE_URL}/api/update-status/`, { // Tumne backend par dono rakhe hain, slash lagana safer standard hai
         request_id: requestId,
         status: newStatus
       });
-      
+
       setToastMessage(`Status updated to "${newStatus}" in BigQuery.`);
       setTimeout(() => setToastMessage(""), 4000);
     } catch (err) {
@@ -109,7 +111,7 @@ export default function MPDashboard({ selectedState, currentUser, onLogOut }) {
       setToastMessage(`Status updated to "${newStatus}" locally.`);
       setTimeout(() => setToastMessage(""), 4000);
     }
-    
+
     // Always update local state for a smooth UI experience
     setComplaints(prev => prev.map(c => c.request_id === requestId ? { ...c, status: newStatus } : c));
     setLiveComplaints(prev => prev.map(c => c.request_id === requestId ? { ...c, status: newStatus } : c));
@@ -145,7 +147,7 @@ export default function MPDashboard({ selectedState, currentUser, onLogOut }) {
 
     // Compute center/zoom inside the effect so we don't put arrays in deps
     const center = STATE_DASHBOARD_DATA[selectedState]?.map?.center || [20.5937, 78.9629];
-    const zoom   = STATE_DASHBOARD_DATA[selectedState]?.map?.zoom   || 5;
+    const zoom = STATE_DASHBOARD_DATA[selectedState]?.map?.zoom || 5;
 
     // Fully destroy any existing Leaflet instance on the container
     if (mapRef.current) {
@@ -201,8 +203,8 @@ export default function MPDashboard({ selectedState, currentUser, onLogOut }) {
   const createCustomIcon = (severity, type, isClicked) => {
     let colorClass = "bg-blue-500 shadow-[0_0_10px_#3b82f6]";
     if (type === "hotspot") {
-      colorClass = severity === "severe" 
-        ? "bg-red-500 shadow-[0_0_12px_#ef4444] animate-pulse" 
+      colorClass = severity === "severe"
+        ? "bg-red-500 shadow-[0_0_12px_#ef4444] animate-pulse"
         : "bg-amber-500 shadow-[0_0_10px_#f59e0b]";
     } else if (type === "gap") {
       colorClass = "bg-cyan-500 shadow-[0_0_10px_#06b6d4]";
@@ -210,8 +212,8 @@ export default function MPDashboard({ selectedState, currentUser, onLogOut }) {
       colorClass = "bg-emerald-500 shadow-[0_0_10px_#10b981]";
     }
 
-    let borderClass = isClicked 
-      ? "ring-4 ring-offset-4 ring-offset-[#0A0B10] ring-blue-400 scale-[1.3] z-[9999]" 
+    let borderClass = isClicked
+      ? "ring-4 ring-offset-4 ring-offset-[#0A0B10] ring-blue-400 scale-[1.3] z-[9999]"
       : "";
 
     return L.divIcon({
@@ -252,9 +254,9 @@ export default function MPDashboard({ selectedState, currentUser, onLogOut }) {
               <div class="text-[10px] font-extrabold text-blue-400 mt-1">Status: ${currentStatus}</div>
             </div>
           `;
-          
+
           marker.bindPopup(popupContent, { className: "dark-popup" });
-          
+
           marker.on("click", () => {
             if (matchedPriority) {
               handleCardClick(matchedPriority.id);
@@ -303,7 +305,7 @@ export default function MPDashboard({ selectedState, currentUser, onLogOut }) {
       stateData.map.gaps.forEach((gap) => {
         const customIcon = createCustomIcon(null, "gap", false);
         const marker = L.marker([gap.lat, gap.lng], { icon: customIcon });
-        
+
         const popupContent = `
           <div class="p-1 font-sans">
             <h4 class="font-black text-xs text-white pb-1">${gap.deficiency}</h4>
@@ -318,7 +320,7 @@ export default function MPDashboard({ selectedState, currentUser, onLogOut }) {
       stateData.map.proposed.forEach((site) => {
         const customIcon = createCustomIcon(null, "proposed", false);
         const marker = L.marker([site.lat, site.lng], { icon: customIcon });
-        
+
         const popupContent = `
           <div class="p-1 font-sans">
             <h4 class="font-black text-xs text-white pb-1">${site.project}</h4>
@@ -362,7 +364,7 @@ export default function MPDashboard({ selectedState, currentUser, onLogOut }) {
       };
       const dbStatus = dbStatusMap[newStatus] || "PENDING";
 
-      await axios.patch(`${API_BASE_URL}/api/requests/${active.id}/`, 
+      await axios.patch(`${API_BASE_URL}/api/requests/${active.id}/`,
         { status: dbStatus },
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -438,7 +440,7 @@ export default function MPDashboard({ selectedState, currentUser, onLogOut }) {
       <FolderLock className="h-16 w-16 text-blue-400 mb-4 animate-pulse" />
       <h3 className="text-xl font-bold text-white mb-2">Constituency Feed Offline</h3>
       <p className="text-slate-400 text-sm leading-relaxed mb-6">
-        No development logs or telemetry indices are reported for <span className="text-blue-400 font-semibold font-mono">{selectedState}</span>. 
+        No development logs or telemetry indices are reported for <span className="text-blue-400 font-semibold font-mono">{selectedState}</span>.
         Select a state with mock data records to preview priority command feeds.
       </p>
       <div className="text-xs bg-slate-900 border border-slate-800 p-4 rounded-lg text-slate-500 text-left font-mono">
@@ -456,7 +458,7 @@ export default function MPDashboard({ selectedState, currentUser, onLogOut }) {
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8 animate-fade-in text-white space-y-6 select-none">
-      
+
       {/* Toast Notification for representative actions */}
       {toastMessage && (
         <div className="fixed top-20 right-6 z-[99999] p-4 bg-slate-900 border border-emerald-500/40 text-emerald-400 rounded-xl shadow-2xl flex items-center gap-3 animate-slide-up">
@@ -478,14 +480,14 @@ export default function MPDashboard({ selectedState, currentUser, onLogOut }) {
             Constituency Dashboard Scoped: {selectedState} (Live Feed Active)
           </p>
         </div>
-        
+
         <div className="flex items-center gap-3">
           <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded border border-blue-500/20 bg-blue-500/5 text-blue-300">
             {currentUser?.isAnonymous ? "Anonymous Sandbox Mode" : "Authorized Session: Admin"}
           </span>
           {currentUser && (
-            <button 
-              onClick={onLogOut} 
+            <button
+              onClick={onLogOut}
               className="text-xs font-bold text-red-400 hover:text-red-300 border border-red-500/20 hover:border-red-500/40 bg-red-950/20 px-3.5 py-1.5 rounded-lg transition-all cursor-pointer"
             >
               Sign Out
@@ -546,7 +548,7 @@ export default function MPDashboard({ selectedState, currentUser, onLogOut }) {
 
       {/* Metrics Row (3 cards, 1-col mobile / 3-col desktop) */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-        
+
         {/* Card 1: Severity hotspots with pulsing red dot icon */}
         <div className="glass-panel p-5 rounded-2xl border border-blue-500/10 flex items-center gap-4 hover:border-blue-500/35 transition-colors">
           <div className="p-3.5 rounded-md bg-red-500/10 text-red-400 border border-red-500/20">
@@ -596,22 +598,20 @@ export default function MPDashboard({ selectedState, currentUser, onLogOut }) {
         {stateData && (
           <button
             onClick={() => setActiveTab("analytics")}
-            className={`pb-3 px-6 text-sm font-bold transition-all relative ${
-              activeTab === "analytics"
-                ? "text-blue-400 border-b-2 border-blue-500"
-                : "text-slate-400 hover:text-slate-200"
-            }`}
+            className={`pb-3 px-6 text-sm font-bold transition-all relative ${activeTab === "analytics"
+              ? "text-blue-400 border-b-2 border-blue-500"
+              : "text-slate-400 hover:text-slate-200"
+              }`}
           >
             📊 Prioritization Analytics
           </button>
         )}
         <button
           onClick={() => setActiveTab("feed")}
-          className={`pb-3 px-6 text-sm font-bold transition-all relative flex items-center gap-2 ${
-            activeTab === "feed"
-              ? "text-blue-400 border-b-2 border-blue-500"
-              : "text-slate-400 hover:text-slate-200"
-          }`}
+          className={`pb-3 px-6 text-sm font-bold transition-all relative flex items-center gap-2 ${activeTab === "feed"
+            ? "text-blue-400 border-b-2 border-blue-500"
+            : "text-slate-400 hover:text-slate-200"
+            }`}
         >
           📢 Live Citizen Feed
           {complaints.length > 0 && (
@@ -626,7 +626,7 @@ export default function MPDashboard({ selectedState, currentUser, onLogOut }) {
         <>
           {/* Split-Screen main layout */}
           <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-stretch">
-            
+
             {/* Left Column queue list (2/5) */}
             <div className="lg:col-span-2 flex flex-col gap-4">
               <div className="flex items-center justify-between">
@@ -662,11 +662,10 @@ export default function MPDashboard({ selectedState, currentUser, onLogOut }) {
                     <div
                       key={item.id}
                       onClick={() => handleCardClick(item.id)}
-                      className={`p-4 rounded-xl border transition-all duration-300 cursor-pointer ${
-                        isActive
-                          ? "bg-slate-900 border-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.30)] translate-x-1"
-                          : "glass-panel hover:bg-slate-900/90"
-                      }`}
+                      className={`p-4 rounded-xl border transition-all duration-300 cursor-pointer ${isActive
+                        ? "bg-slate-900 border-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.30)] translate-x-1"
+                        : "glass-panel hover:bg-slate-900/90"
+                        }`}
                     >
                       {/* Top Row: status badge on left, rank chip on right */}
                       <div className="flex items-center justify-between gap-3">
@@ -679,9 +678,8 @@ export default function MPDashboard({ selectedState, currentUser, onLogOut }) {
                       </div>
 
                       {/* Project Title */}
-                      <h4 className={`text-sm font-bold mt-3 leading-snug ${
-                        isActive ? "text-blue-400 font-extrabold" : "text-white"
-                      }`}>
+                      <h4 className={`text-sm font-bold mt-3 leading-snug ${isActive ? "text-blue-400 font-extrabold" : "text-white"
+                        }`}>
                         {item.title}
                       </h4>
 
@@ -721,25 +719,22 @@ export default function MPDashboard({ selectedState, currentUser, onLogOut }) {
                 <div className="flex p-0.5 rounded-lg bg-slate-900 border border-slate-800 shrink-0">
                   <button
                     onClick={() => setMapLayer("hotspots")}
-                    className={`px-3 py-1 rounded text-[11px] font-bold transition-all cursor-pointer ${
-                      mapLayer === "hotspots" ? "bg-blue-600 text-white shadow-md" : "text-slate-400 hover:text-slate-200"
-                    }`}
+                    className={`px-3 py-1 rounded text-[11px] font-bold transition-all cursor-pointer ${mapLayer === "hotspots" ? "bg-blue-600 text-white shadow-md" : "text-slate-400 hover:text-slate-200"
+                      }`}
                   >
                     Citizen Hotspots
                   </button>
                   <button
                     onClick={() => setMapLayer("gaps")}
-                    className={`px-3 py-1 rounded text-[11px] font-bold transition-all cursor-pointer ${
-                      mapLayer === "gaps" ? "bg-blue-600 text-white shadow-md" : "text-slate-400 hover:text-slate-200"
-                    }`}
+                    className={`px-3 py-1 rounded text-[11px] font-bold transition-all cursor-pointer ${mapLayer === "gaps" ? "bg-blue-600 text-white shadow-md" : "text-slate-400 hover:text-slate-200"
+                      }`}
                   >
                     Infrastructure Gaps
                   </button>
                   <button
                     onClick={() => setMapLayer("proposed")}
-                    className={`px-3 py-1 rounded text-[11px] font-bold transition-all cursor-pointer ${
-                      mapLayer === "proposed" ? "bg-blue-600 text-white shadow-md" : "text-slate-400 hover:text-slate-200"
-                    }`}
+                    className={`px-3 py-1 rounded text-[11px] font-bold transition-all cursor-pointer ${mapLayer === "proposed" ? "bg-blue-600 text-white shadow-md" : "text-slate-400 hover:text-slate-200"
+                      }`}
                   >
                     Proposed Sites
                   </button>
@@ -749,7 +744,7 @@ export default function MPDashboard({ selectedState, currentUser, onLogOut }) {
               {/* Leaflet container canvas */}
               <div className="relative w-full h-[480px] rounded-2xl border border-blue-500/20 bg-slate-950 overflow-hidden shadow-2xl z-10">
                 <div ref={mapContainerRef} className="w-full h-full" />
-                
+
                 {!activePriority && (
                   <div className="absolute bottom-4 right-4 bg-slate-950/90 border border-slate-800 p-3 rounded-lg shadow-xl text-center max-w-[200px] pointer-events-none z-[1000] animate-bounce">
                     <p className="text-[10px] text-slate-400 leading-snug">
@@ -765,7 +760,7 @@ export default function MPDashboard({ selectedState, currentUser, onLogOut }) {
           {/* 3. Bottom Detail Drawer */}
           {drawerOpen && activePriority && (
             <div className="bg-slate-950 border border-blue-500/20 shadow-2xl rounded-2xl p-6 relative animate-slide-up mt-4">
-              <button 
+              <button
                 onClick={() => setDrawerOpen(false)}
                 className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 hover:bg-slate-900 border border-slate-800 rounded-lg cursor-pointer transition-colors"
                 title="Close Drawer"
@@ -790,7 +785,7 @@ export default function MPDashboard({ selectedState, currentUser, onLogOut }) {
                       {activePriority.whyAI || "No description data provided."}
                     </p>
                   </div>
-                  
+
                   <div className="mt-4 pt-4 border-t border-slate-800 flex flex-wrap gap-2.5">
                     <button
                       onClick={() => changePriorityStatus("In Progress")}
@@ -853,13 +848,12 @@ export default function MPDashboard({ selectedState, currentUser, onLogOut }) {
                             <td className="py-2 text-slate-300 font-medium">{check.label}</td>
                             <td className="py-2 text-slate-350 font-mono text-right font-semibold">{check.value}</td>
                             <td className="py-2 text-right">
-                              <span className={`inline-block text-[9px] font-bold px-2 py-0.5 rounded font-mono ${
-                                check.status === "Critical" 
-                                  ? "bg-red-500/10 text-red-400 border border-red-500/20" 
-                                  : check.status === "Warning"
-                                    ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
-                                    : "bg-slate-800 text-slate-400"
-                              }`}>
+                              <span className={`inline-block text-[9px] font-bold px-2 py-0.5 rounded font-mono ${check.status === "Critical"
+                                ? "bg-red-500/10 text-red-400 border border-red-500/20"
+                                : check.status === "Warning"
+                                  ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                                  : "bg-slate-800 text-slate-400"
+                                }`}>
                                 {check.status}
                               </span>
                             </td>
@@ -890,7 +884,7 @@ export default function MPDashboard({ selectedState, currentUser, onLogOut }) {
             complaints
               .filter(c => selectedSector === "ALL" || (CATEGORY_TO_SECTOR[c.category] || "ALL") === selectedSector)
               .map((complaint) => (
-                <div 
+                <div
                   key={complaint.request_id}
                   onClick={() => setSelectedComplaint(complaint)}
                   className="cursor-pointer border border-white/10 bg-white/[0.02] hover:bg-white/[0.05] backdrop-blur-md rounded-2xl p-5 hover:border-cyan-500/50 transition-all duration-300 flex flex-col justify-between h-full group"
@@ -904,18 +898,18 @@ export default function MPDashboard({ selectedState, currentUser, onLogOut }) {
                         {formatDateTime(complaint.submitted_at)}
                       </span>
                     </div>
-                    
+
                     <p className="mt-3.5 text-sm font-semibold text-slate-200 line-clamp-2 leading-relaxed">
                       {complaint.english_translation || "No description provided."}
                     </p>
 
                     {complaint.image_url && (
                       <div className="relative overflow-hidden rounded-lg border border-white/10 my-3 h-32 bg-slate-950">
-                        <img 
-                          src={complaint.image_url} 
-                          alt="Complaint Evidence" 
+                        <img
+                          src={complaint.image_url}
+                          alt="Complaint Evidence"
                           className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                          onError={(e) => { e.target.src = 'https://placehold.co/600x400/1a1a1a/ffffff?text=Image+Load+Failed'; }} 
+                          onError={(e) => { e.target.src = 'https://placehold.co/600x400/1a1a1a/ffffff?text=Image+Load+Failed'; }}
                         />
                       </div>
                     )}
@@ -924,22 +918,20 @@ export default function MPDashboard({ selectedState, currentUser, onLogOut }) {
                   <div className="mt-4 pt-3.5 border-t border-white/5 flex items-center justify-between text-xs">
                     <div className="flex items-center gap-2">
                       <span className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">Severity:</span>
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                        complaint.severity_index >= 7 
-                          ? "bg-red-500/10 text-red-400 border border-red-500/25" 
-                          : "bg-amber-500/10 text-amber-400 border border-amber-500/25"
-                      }`}>
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${complaint.severity_index >= 7
+                        ? "bg-red-500/10 text-red-400 border border-red-500/25"
+                        : "bg-amber-500/10 text-amber-400 border border-amber-500/25"
+                        }`}>
                         {complaint.severity_index}/10
                       </span>
                     </div>
 
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold border uppercase ${
-                      complaint.status === "In Progress"
-                        ? "text-amber-400 border-amber-500/25 bg-amber-500/10"
-                        : complaint.status === "Resolved"
-                          ? "text-emerald-400 border-emerald-500/25 bg-emerald-500/10"
-                          : "text-blue-400 border-blue-500/25 bg-blue-500/10"
-                    }`}>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold border uppercase ${complaint.status === "In Progress"
+                      ? "text-amber-400 border-amber-500/25 bg-amber-500/10"
+                      : complaint.status === "Resolved"
+                        ? "text-emerald-400 border-emerald-500/25 bg-emerald-500/10"
+                        : "text-blue-400 border-blue-500/25 bg-blue-500/10"
+                      }`}>
                       {complaint.status || "Pending"}
                     </span>
                   </div>
@@ -953,9 +945,9 @@ export default function MPDashboard({ selectedState, currentUser, onLogOut }) {
       {selectedComplaint && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md p-4 animate-fade-in">
           <div className="relative w-full max-w-2xl border border-white/20 bg-[#121216]/95 backdrop-blur-xl rounded-2xl p-6 shadow-2xl overflow-y-auto max-h-[90vh]">
-            
+
             {/* Close Button */}
-            <button 
+            <button
               onClick={() => setSelectedComplaint(null)}
               className="absolute top-4 right-4 text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 p-2 rounded-full transition-colors cursor-pointer"
             >
@@ -988,12 +980,12 @@ export default function MPDashboard({ selectedState, currentUser, onLogOut }) {
                 <div>
                   <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Evidence Photo</h4>
                   <div className="relative overflow-hidden rounded-xl border border-white/10 bg-slate-950 max-h-64 flex items-center justify-center">
-                    <img 
-                      src={selectedComplaint.image_url} 
-                      alt="Evidence" 
-                      className="max-h-64 object-contain" 
-                      onError={(e) => { 
-                        e.target.src = 'https://placehold.co/600x400/1a1a1a/ffffff?text=Image+Load+Failed'; 
+                    <img
+                      src={selectedComplaint.image_url}
+                      alt="Evidence"
+                      className="max-h-64 object-contain"
+                      onError={(e) => {
+                        e.target.src = 'https://placehold.co/600x400/1a1a1a/ffffff?text=Image+Load+Failed';
                       }}
                     />
                   </div>
@@ -1040,25 +1032,23 @@ export default function MPDashboard({ selectedState, currentUser, onLogOut }) {
             <div>
               <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Update Progress Status</h4>
               <div className="flex flex-wrap gap-3">
-                <button 
+                <button
                   onClick={() => handleStatusChange(selectedComplaint.request_id, 'In Progress')}
-                  className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border text-xs font-bold transition-all cursor-pointer ${
-                    selectedComplaint.status === 'In Progress' 
-                    ? 'bg-amber-500/20 text-amber-400 border-amber-500 shadow-[0_0_12px_rgba(245,158,11,0.15)]' 
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border text-xs font-bold transition-all cursor-pointer ${selectedComplaint.status === 'In Progress'
+                    ? 'bg-amber-500/20 text-amber-400 border-amber-500 shadow-[0_0_12px_rgba(245,158,11,0.15)]'
                     : 'bg-white/5 text-gray-300 border-white/10 hover:bg-amber-500/10 hover:text-amber-400'
-                  }`}
+                    }`}
                 >
                   <Clock size={14} />
                   In Progress
                 </button>
 
-                <button 
+                <button
                   onClick={() => handleStatusChange(selectedComplaint.request_id, 'Resolved')}
-                  className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border text-xs font-bold transition-all cursor-pointer ${
-                    selectedComplaint.status === 'Resolved' 
-                    ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.15)]' 
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border text-xs font-bold transition-all cursor-pointer ${selectedComplaint.status === 'Resolved'
+                    ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.15)]'
                     : 'bg-white/5 text-gray-300 border-white/10 hover:bg-emerald-500/10 hover:text-emerald-400'
-                  }`}
+                    }`}
                 >
                   <CheckCircle size={14} />
                   Mark Resolved
@@ -1093,7 +1083,7 @@ export default function MPDashboard({ selectedState, currentUser, onLogOut }) {
 
         {feedLoading && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {[1,2,3].map(i => (
+            {[1, 2, 3].map(i => (
               <div key={i} className="rounded-2xl border border-white/5 bg-white/[0.02] p-4 animate-pulse space-y-3">
                 <div className="h-3 bg-slate-800 rounded w-1/3" />
                 <div className="h-32 bg-slate-800/60 rounded-lg" />
@@ -1123,13 +1113,13 @@ export default function MPDashboard({ selectedState, currentUser, onLogOut }) {
             {liveComplaints.map((complaint) => {
               const severityColor =
                 complaint.severity_index >= 8 ? "border-red-500/40 text-red-400 bg-red-500/10"
-                : complaint.severity_index >= 5 ? "border-amber-500/40 text-amber-400 bg-amber-500/10"
-                : "border-blue-500/40 text-blue-400 bg-blue-500/10";
+                  : complaint.severity_index >= 5 ? "border-amber-500/40 text-amber-400 bg-amber-500/10"
+                    : "border-blue-500/40 text-blue-400 bg-blue-500/10";
 
               const sectorEmoji = {
-                WATER:"🚰",ROAD:"🛣️",HEALTH:"🏥",EDUCATION:"📚",
-                ELECTRICITY:"⚡",SANITATION:"🧹",WASTE:"🗑️",
-                SAFETY:"🛡️",WOMEN_CHILD:"👶",ENVIRONMENT:"🌱",AGRICULTURE:"🌾"
+                WATER: "🚰", ROAD: "🛣️", HEALTH: "🏥", EDUCATION: "📚",
+                ELECTRICITY: "⚡", SANITATION: "🧹", WASTE: "🗑️",
+                SAFETY: "🛡️", WOMEN_CHILD: "👶", ENVIRONMENT: "🌱", AGRICULTURE: "🌾"
               }[complaint.sector] || "📋";
 
               return (
@@ -1169,13 +1159,12 @@ export default function MPDashboard({ selectedState, currentUser, onLogOut }) {
                             SEV {complaint.severity_index}/10
                           </span>
                         )}
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold border uppercase font-mono ${
-                          complaint.status === "In Progress"
-                            ? "text-amber-400 border-amber-500/25 bg-amber-500/10"
-                            : complaint.status === "Resolved"
-                              ? "text-emerald-400 border-emerald-500/25 bg-emerald-500/10"
-                              : "text-blue-400 border-blue-500/25 bg-blue-500/10"
-                        }`}>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold border uppercase font-mono ${complaint.status === "In Progress"
+                          ? "text-amber-400 border-amber-500/25 bg-amber-500/10"
+                          : complaint.status === "Resolved"
+                            ? "text-emerald-400 border-emerald-500/25 bg-emerald-500/10"
+                            : "text-blue-400 border-blue-500/25 bg-blue-500/10"
+                          }`}>
                           {complaint.status || "Pending"}
                         </span>
                       </div>
@@ -1190,10 +1179,10 @@ export default function MPDashboard({ selectedState, currentUser, onLogOut }) {
                         <span className="text-[9px] text-blue-400 font-bold uppercase tracking-wider font-mono">
                           🔊 Voice Attachment Description
                         </span>
-                        <audio 
-                          src={complaint.audio_url} 
-                          controls 
-                          className="w-full h-8 text-xs focus:outline-none" 
+                        <audio
+                          src={normalizeMediaUrl(complaint.audio_url)}
+                          controls
+                          className="w-full h-8 text-xs focus:outline-none"
                         />
                       </div>
                     )}
@@ -1204,11 +1193,10 @@ export default function MPDashboard({ selectedState, currentUser, onLogOut }) {
                           e.stopPropagation();
                           handleStatusChange(complaint.request_id, 'In Progress');
                         }}
-                        className={`flex-1 py-1.5 px-2 rounded-lg border text-[10px] font-bold transition-all cursor-pointer text-center ${
-                          complaint.status === 'In Progress'
-                            ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
-                            : 'bg-white/5 text-slate-400 border-white/10 hover:bg-amber-500/10 hover:text-amber-400'
-                        }`}
+                        className={`flex-1 py-1.5 px-2 rounded-lg border text-[10px] font-bold transition-all cursor-pointer text-center ${complaint.status === 'In Progress'
+                          ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+                          : 'bg-white/5 text-slate-400 border-white/10 hover:bg-amber-500/10 hover:text-amber-400'
+                          }`}
                       >
                         ⚙️ In Progress
                       </button>
@@ -1217,11 +1205,10 @@ export default function MPDashboard({ selectedState, currentUser, onLogOut }) {
                           e.stopPropagation();
                           handleStatusChange(complaint.request_id, 'Resolved');
                         }}
-                        className={`flex-1 py-1.5 px-2 rounded-lg border text-[10px] font-bold transition-all cursor-pointer text-center ${
-                          complaint.status === 'Resolved'
-                            ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
-                            : 'bg-white/5 text-slate-400 border-white/10 hover:bg-emerald-500/10 hover:text-emerald-400'
-                        }`}
+                        className={`flex-1 py-1.5 px-2 rounded-lg border text-[10px] font-bold transition-all cursor-pointer text-center ${complaint.status === 'Resolved'
+                          ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                          : 'bg-white/5 text-slate-400 border-white/10 hover:bg-emerald-500/10 hover:text-emerald-400'
+                          }`}
                       >
                         ✅ Resolved
                       </button>
@@ -1234,7 +1221,7 @@ export default function MPDashboard({ selectedState, currentUser, onLogOut }) {
                       </span>
                       <span>
                         {complaint.submitted_at
-                          ? new Date(complaint.submitted_at).toLocaleDateString("en-IN", {day:"2-digit",month:"short",year:"2-digit"})
+                          ? new Date(complaint.submitted_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "2-digit" })
                           : "—"}
                       </span>
                     </div>
